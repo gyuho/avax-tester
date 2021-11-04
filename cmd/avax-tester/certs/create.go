@@ -1,6 +1,7 @@
 package certs
 
 import (
+	"crypto/tls"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,7 +66,7 @@ func createFunc(cmd *cobra.Command, args []string) {
 		keyPath := filepath.Join(dirPath, fmt.Sprintf("staker%d.key", i+1))
 		certPath := filepath.Join(dirPath, fmt.Sprintf("staker%d.crt", i+1))
 
-		certBytes, err := writeNodeStakingKeyPair(keyPath, certPath)
+		cert, err := writeNodeStakingKeyPair(keyPath, certPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to create %q and %q (%v)\n", keyPath, certPath, err)
 			os.Exit(1)
@@ -82,7 +83,8 @@ func createFunc(cmd *cobra.Command, args []string) {
 		fmt.Printf("\n\n")
 
 		if i == 0 {
-			id, err := ids.ToShortID(hashing.PubkeyBytesToAddress(certBytes))
+			// ref. node/Node.Initialize
+			id, err := ids.ToShortID(hashing.PubkeyBytesToAddress(cert.Leaf.Raw))
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "failed to create node ID %v\n", err)
 			}
@@ -94,7 +96,7 @@ func createFunc(cmd *cobra.Command, args []string) {
 	fmt.Printf("'avax-tester certs create --dir-path %q' success\n", dirPath)
 }
 
-func writeNodeStakingKeyPair(keyPath, certPath string) (certBytes []byte, err error) {
+func writeNodeStakingKeyPair(keyPath, certPath string) (cert *tls.Certificate, err error) {
 	certBytes, keyBytes, err := staking.NewCertAndKeyBytes()
 	if err != nil {
 		return nil, err
@@ -136,5 +138,5 @@ func writeNodeStakingKeyPair(keyPath, certPath string) (certBytes []byte, err er
 		return nil, err
 	}
 
-	return certBytes, nil
+	return staking.LoadTLSCert(keyPath, certPath)
 }
