@@ -66,7 +66,7 @@ func createFunc(cmd *cobra.Command, args []string) {
 		keyPath := filepath.Join(dirPath, fmt.Sprintf("staker%d.key", i+1))
 		certPath := filepath.Join(dirPath, fmt.Sprintf("staker%d.crt", i+1))
 
-		cert, certBytes, err := writeNodeStakingKeyPair(keyPath, certPath)
+		cert, _, err := writeNodeStakingKeyPair(keyPath, certPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to create %q and %q (%v)\n", keyPath, certPath, err)
 			os.Exit(1)
@@ -84,7 +84,6 @@ func createFunc(cmd *cobra.Command, args []string) {
 
 		if i == 0 {
 			// NOTE: hashing.PubkeyBytesToAddress(certBytes) does not work...
-			_ = certBytes
 			// ref. node/Node.Initialize
 			id, err := ids.ToShortID(hashing.PubkeyBytesToAddress(cert.Leaf.Raw))
 			if err != nil {
