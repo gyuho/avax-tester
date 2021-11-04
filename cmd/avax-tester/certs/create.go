@@ -66,7 +66,7 @@ func createFunc(cmd *cobra.Command, args []string) {
 		keyPath := filepath.Join(dirPath, fmt.Sprintf("staker%d.key", i+1))
 		certPath := filepath.Join(dirPath, fmt.Sprintf("staker%d.crt", i+1))
 
-		cert, err := writeNodeStakingKeyPair(keyPath, certPath)
+		cert, certBytes, err := writeNodeStakingKeyPair(keyPath, certPath)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to create %q and %q (%v)\n", keyPath, certPath, err)
 			os.Exit(1)
@@ -83,6 +83,8 @@ func createFunc(cmd *cobra.Command, args []string) {
 		fmt.Printf("\n\n")
 
 		if i == 0 {
+			// NOTE: hashing.PubkeyBytesToAddress(certBytes) does not work...
+			_ = certBytes
 			// ref. node/Node.Initialize
 			id, err := ids.ToShortID(hashing.PubkeyBytesToAddress(cert.Leaf.Raw))
 			if err != nil {
@@ -96,47 +98,54 @@ func createFunc(cmd *cobra.Command, args []string) {
 	fmt.Printf("'avax-tester certs create --dir-path %q' success\n", dirPath)
 }
 
-func writeNodeStakingKeyPair(keyPath, certPath string) (cert *tls.Certificate, err error) {
+func writeNodeStakingKeyPair(keyPath, certPath string) (
+	cert *tls.Certificate,
+	certBytes []byte,
+	err error) {
 	certBytes, keyBytes, err := staking.NewCertAndKeyBytes()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := os.MkdirAll(filepath.Dir(certPath), perms.ReadWriteExecute); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := os.MkdirAll(filepath.Dir(keyPath), perms.ReadWriteExecute); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	certFile, err := os.Create(certPath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if _, err = certFile.Write(certBytes); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err = certFile.Close(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err = os.Chmod(certPath, perms.ReadOnly); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Write key to disk
 	keyOut, err := os.Create(keyPath)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if _, err := keyOut.Write(keyBytes); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := keyOut.Close(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := os.Chmod(keyPath, perms.ReadOnly); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return staking.LoadTLSCert(keyPath, certPath)
+	cert, err = staking.LoadTLSCert(keyPath, certPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cert, certBytes, nil
 }
