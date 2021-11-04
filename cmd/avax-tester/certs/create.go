@@ -5,7 +5,11 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/staking"
+	"github.com/ava-labs/avalanchego/utils/constants"
+	"github.com/ava-labs/avalanchego/utils/hashing"
+	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
@@ -55,17 +59,82 @@ func createFunc(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "failed to delete %q (%v)\n", dirPath, err)
 		os.Exit(1)
 	}
+
+	firstNodeFullID := ""
 	for i := 0; i < nodes; i++ {
-		keyPath := filepath.Join(dirPath, fmt.Sprintf("s%d-key.pem", i+1))
-		certPath := filepath.Join(dirPath, fmt.Sprintf("s%d.pem", i+1))
-		if err := staking.InitNodeStakingKeyPair(keyPath, certPath); err != nil {
+		keyPath := filepath.Join(dirPath, fmt.Sprintf("staker%d.key", i+1))
+		certPath := filepath.Join(dirPath, fmt.Sprintf("staker%d.crt", i+1))
+
+		certBytes, err := writeNodeStakingKeyPair(keyPath, certPath)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to create %q and %q (%v)\n", keyPath, certPath, err)
 			os.Exit(1)
 		}
+
 		fmt.Printf("----------\n")
-		fmt.Printf(colorize(logColor, "[light_green][%02d] certificate\n[default]--staking-tls-key-file=%s\n--staking-tls-cert-file=%s\n\n"), i+1, keyPath, certPath)
+		fmt.Printf(colorize(logColor, `[light_green][%02d] certificate[default]
+--staking-tls-key-file=%s \
+--staking-tls-cert-file=%s`), i+1, keyPath, certPath)
+		if firstNodeFullID != "" {
+			fmt.Printf(` \
+--bootstrap-ids=%s`, firstNodeFullID)
+		}
+		fmt.Printf("\n\n")
+
+		if i == 0 {
+			id, err := ids.ToShortID(hashing.PubkeyBytesToAddress(certBytes))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "failed to create node ID %v\n", err)
+			}
+			firstNodeFullID = id.PrefixedString(constants.NodeIDPrefix)
+		}
 	}
 
 	fmt.Printf("\n*********************************\n")
 	fmt.Printf("'avax-tester certs create --dir-path %q' success\n", dirPath)
+}
+
+func writeNodeStakingKeyPair(keyPath, certPath string) (certBytes []byte, err error) {
+	certBytes, keyBytes, err := staking.NewCertAndKeyBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(certPath), perms.ReadWriteExecute); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(filepath.Dir(keyPath), perms.ReadWriteExecute); err != nil {
+		return nil, err
+	}
+
+	certFile, err := os.Create(certPath)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = certFile.Write(certBytes); err != nil {
+		return nil, err
+	}
+	if err = certFile.Close(); err != nil {
+		return nil, err
+	}
+	if err = os.Chmod(certPath, perms.ReadOnly); err != nil {
+		return nil, err
+	}
+
+	// Write key to disk
+	keyOut, err := os.Create(keyPath)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := keyOut.Write(keyBytes); err != nil {
+		return nil, err
+	}
+	if err := keyOut.Close(); err != nil {
+		return nil, err
+	}
+	if err := os.Chmod(keyPath, perms.ReadOnly); err != nil {
+		return nil, err
+	}
+
+	return certBytes, nil
 }
