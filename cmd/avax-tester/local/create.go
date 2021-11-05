@@ -155,7 +155,9 @@ func createFunc(cmd *cobra.Command, args []string) {
 	fmt.Printf("'avax-tester local create' success!\n\ncat %q\n", cmdOutputPath)
 }
 
-const curlCmd = `curl -X POST --data '{
+const curlCmd = `
+# use this to test API
+curl -X POST --data '{
 	"jsonrpc":"2.0",
 	"id"     :1,
 	"method" :"info.peers"
