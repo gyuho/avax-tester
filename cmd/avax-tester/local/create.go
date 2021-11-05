@@ -130,16 +130,19 @@ func createFunc(cmd *cobra.Command, args []string) {
 			all[i].BootstrapIPs = fmt.Sprintf("127.0.0.1:%d", all[0].StakingPort)
 			all[i].BootstrapIDs = all[0].NodeID
 		}
+
+		fmt.Printf(colorize(logColor, "[yellow]created %q for %q\n"), certPath, nodeID)
 	}
 
 	ss := tmplAvalancheGoBash
 	for i, av := range all {
 		s := av.String()
-		fmt.Printf(colorize(logColor, `[light_green]-----
+		fmt.Printf(colorize(logColor, `
+[light_green]-----
 # [%02d][default]
 %s
 `), i+1, s)
-		ss += fmt.Sprintf("# [%02d]\n%s\n\n", i, s)
+		ss += fmt.Sprintf("# [%02d]\n%s\n\n", i+1, s)
 	}
 	if err := ioutil.WriteFile(cmdOutputPath, []byte(ss), 0777); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to write %q (%v)\n", cmdOutputPath, err)
@@ -147,7 +150,7 @@ func createFunc(cmd *cobra.Command, args []string) {
 	}
 
 	fmt.Printf("\n*********************************\n")
-	fmt.Printf("'avax-tester local create' success (cat %q)\n", cmdOutputPath)
+	fmt.Printf("'avax-tester local create' success!\n\ncat %q\n", cmdOutputPath)
 }
 
 type avalancheGo struct {
