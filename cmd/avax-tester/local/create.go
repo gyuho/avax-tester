@@ -134,6 +134,7 @@ func createFunc(cmd *cobra.Command, args []string) {
 		fmt.Printf(colorize(logColor, "[yellow]created %q for %q\n"), certPath, nodeID)
 	}
 
+	println()
 	ss := tmplAvalancheGoBash
 	for i, av := range all {
 		s := av.String()
@@ -196,6 +197,7 @@ cd ${HOME}/go/src/github.com/ava-labs/avalanchego
 const tmplAvalancheGoBash = `#!/bin/bash
 set -e
 set -x
+
 
 `
 
