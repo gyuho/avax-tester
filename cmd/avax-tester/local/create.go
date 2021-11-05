@@ -145,7 +145,8 @@ func createFunc(cmd *cobra.Command, args []string) {
 `), i+1, s)
 		ss += fmt.Sprintf("# [%02d]\n%s\n\n", i+1, s)
 	}
-	if err := ioutil.WriteFile(cmdOutputPath, []byte(ss), 0777); err != nil {
+	fmt.Println(curlCmd)
+	if err := ioutil.WriteFile(cmdOutputPath, []byte(ss+curlCmd), 0777); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to write %q (%v)\n", cmdOutputPath, err)
 		os.Exit(1)
 	}
@@ -153,6 +154,16 @@ func createFunc(cmd *cobra.Command, args []string) {
 	fmt.Printf("\n*********************************\n")
 	fmt.Printf("'avax-tester local create' success!\n\ncat %q\n", cmdOutputPath)
 }
+
+const curlCmd = `curl -X POST --data '{
+	"jsonrpc":"2.0",
+	"id"     :1,
+	"method" :"info.peers"
+}' \
+-H 'content-type:application/json;' \
+127.0.0.1:9650/ext/info
+
+`
 
 type avalancheGo struct {
 	NodeName           string
