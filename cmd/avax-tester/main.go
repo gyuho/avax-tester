@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/gyuho/avax-tester/cmd/avax-tester/certs"
+	"github.com/gyuho/avax-tester/cmd/avax-tester/local"
 	"github.com/gyuho/avax-tester/cmd/avax-tester/version"
 	"github.com/spf13/cobra"
 )
@@ -22,7 +22,7 @@ func init() {
 
 func init() {
 	rootCmd.AddCommand(
-		certs.NewCommand(),
+		local.NewCommand(),
 		version.NewCommand(),
 	)
 }

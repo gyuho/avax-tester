@@ -1,5 +1,5 @@
-// Package certs implements certificates related commands.
-package certs
+// Package local implements helper for local cluster setups.
+package local
 
 import (
 	"github.com/mitchellh/colorstring"
@@ -18,8 +18,8 @@ var (
 // NewCommand implements "aws-k8s-tester eks" command.
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "certs",
-		Short: "certs commands",
+		Use:   "local",
+		Short: "local commands",
 	}
 	cmd.PersistentFlags().BoolVarP(&enablePrompt, "enable-prompt", "e", true, "'true' to enable prompt mode")
 	cmd.PersistentFlags().BoolVarP(&logColor, "log-color", "c", true, "'true' to enable log color")
