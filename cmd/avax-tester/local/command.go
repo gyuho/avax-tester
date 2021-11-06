@@ -25,6 +25,7 @@ func NewCommand() *cobra.Command {
 	cmd.PersistentFlags().BoolVarP(&logColor, "log-color", "c", true, "'true' to enable log color")
 	cmd.AddCommand(
 		newCreate(),
+		newTransfer(),
 	)
 	return cmd
 }

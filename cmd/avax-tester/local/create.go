@@ -1,19 +1,18 @@
 package local
 
 import (
-	"bytes"
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"text/template"
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/staking"
 	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/hashing"
 	"github.com/ava-labs/avalanchego/utils/perms"
+	"github.com/gyuho/avax-tester/avax"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
@@ -89,7 +88,7 @@ func createFunc(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	all := make([]avalancheGo, nodes)
+	all := make([]avax.Flag, nodes)
 	for i := 0; i < nodes; i++ {
 		nodeName := fmt.Sprintf("s%d", i+1)
 		keyPath := filepath.Join(certsDirPath, fmt.Sprintf("%s.key", nodeName))
@@ -108,7 +107,7 @@ func createFunc(cmd *cobra.Command, args []string) {
 		}
 		nodeID := id.PrefixedString(constants.NodeIDPrefix)
 
-		all[i] = avalancheGo{
+		all[i] = avax.Flag{
 			NodeName:           nodeName,
 			NodeID:             nodeID,
 			Binary:             "./build/avalanchego",
@@ -167,61 +166,12 @@ curl -X POST --data '{
 
 `
 
-type avalancheGo struct {
-	NodeName           string
-	NodeID             string
-	Binary             string
-	LogLevel           string
-	NetworkID          string
-	PublicIP           string
-	HTTPPort           int
-	SnowSampleSize     int
-	SnowQuorumSize     int
-	DBDir              string
-	StakingEnabled     bool
-	StakingPort        int
-	BootstrapIPs       string
-	BootstrapIDs       string
-	StakingTLSKeyFile  string
-	StakingTLSCertFile string
-}
-
-const tmplAvalancheGoCmd = `# commands for {{.NodeName}}, {{.NodeID}}
-kill -9 $(lsof -t -i:{{.HTTPPort}})
-kill -9 $(lsof -t -i:{{.StakingPort}}){{if .StakingEnabled}}
-openssl x509 -in {{.StakingTLSCertFile}} -text -noout{{end}}
-cd ${HOME}/go/src/github.com/ava-labs/avalanchego
-{{.Binary}} \
---log-level={{.LogLevel}} \
---network-id={{.NetworkID}} \
---public-ip={{.PublicIP}} \
---http-port={{.HTTPPort}} \
---snow-sample-size={{.SnowSampleSize}} \
---snow-quorum-size={{.SnowQuorumSize}} \
---db-dir={{.DBDir}} \
---staking-enabled={{.StakingEnabled}} \
---staking-port={{.StakingPort}} \
---bootstrap-ips={{.BootstrapIPs}} \
---bootstrap-ids={{.BootstrapIDs}}{{if .StakingEnabled}} \
---staking-tls-key-file={{.StakingTLSKeyFile}} \
---staking-tls-cert-file={{.StakingTLSCertFile}}{{end}}
-`
-
 const tmplAvalancheGoBash = `#!/bin/bash
 set -e
 set -x
 
 
 `
-
-func (ag avalancheGo) String() string {
-	t := template.Must(template.New("tmplAvalancheGoCmd").Parse(tmplAvalancheGoCmd))
-	var buf bytes.Buffer
-	if err := t.Execute(&buf, ag); err != nil {
-		panic(err)
-	}
-	return buf.String()
-}
 
 func writeNodeStakingKeyPair(keyPath, certPath string) (
 	cert *tls.Certificate,
