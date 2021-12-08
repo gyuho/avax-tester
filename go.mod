@@ -3,7 +3,7 @@ module github.com/gyuho/avax-tester
 go 1.17
 
 require (
-	github.com/ava-labs/avalanchego v1.6.4
+	github.com/ava-labs/avalanchego v1.7.1
 	github.com/manifoldco/promptui v0.9.0
 	github.com/mitchellh/colorstring v0.0.0-20190213212951-d06e56a500db
 	github.com/spf13/cobra v1.2.1
