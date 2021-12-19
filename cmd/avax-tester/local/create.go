@@ -99,7 +99,7 @@ func createFunc(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 		// NOTE: hashing.PubkeyBytesToAddress(certBytes) does not work...
-		// ref. avalanchego/node/Node.Initialize
+		// ref. https://pkg.go.dev/github.com/ava-labs/avalanchego/node#Node.Initialize
 		id, err := ids.ToShortID(hashing.PubkeyBytesToAddress(cert.Leaf.Raw))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "failed to create node ID %v", err)
