@@ -1,17 +1,17 @@
-name: goreleaser
+name: Build + test + release
 
 on:
-  pull_request:
   push:
+  pull_request:
 
 permissions:
   contents: write
 
 jobs:
-  goreleaser:
+  build_test_release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Git checkout
         uses: actions/checkout@v2
         with:
           fetch-depth: 0
@@ -22,7 +22,6 @@ jobs:
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v2
         with:
-          # either 'goreleaser' (default) or 'goreleaser-pro'
           distribution: goreleaser
           version: latest
           args: release --rm-dist
