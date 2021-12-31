@@ -11,7 +11,7 @@ type ClusterInfo struct {
 	URIs     []string `json:"uris"`
 	Endpoint string   `json:"endpoint"`
 	PID      int      `json:"pid"`
-	LogsDir  string   `json:"logs_dir"`
+	LogsDir  string   `json:"logsDir"`
 }
 
 const fsModeWrite = 0o600
