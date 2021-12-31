@@ -218,7 +218,7 @@ func writeNodeStakingKeyPair(keyPath, certPath string) (
 		return nil, nil, err
 	}
 
-	cert, err = staking.LoadTLSCert(keyPath, certPath)
+	cert, err = staking.LoadTLSCertFromFiles(keyPath, certPath)
 	if err != nil {
 		return nil, nil, err
 	}

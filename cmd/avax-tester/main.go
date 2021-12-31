@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/gyuho/avax-tester/cmd/avax-tester/local"
+	"github.com/gyuho/avax-tester/cmd/avax-tester/run"
 	"github.com/gyuho/avax-tester/cmd/avax-tester/version"
 	"github.com/spf13/cobra"
 )
@@ -23,6 +24,7 @@ func init() {
 func init() {
 	rootCmd.AddCommand(
 		local.NewCommand(),
+		run.NewCommand(),
 		version.NewCommand(),
 	)
 }
