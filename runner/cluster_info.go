@@ -12,6 +12,13 @@ type ClusterInfo struct {
 	Endpoint string   `json:"endpoint"`
 	PID      int      `json:"pid"`
 	LogsDir  string   `json:"logsDir"`
+
+	XChainPreFundedAddr string            `json:"xChainPreFundedAddr"`
+	XChainAddrs         map[string]string `json:"xChainAddrs"`
+	PChainPreFundedAddr string            `json:"pChainPreFundedAddr"`
+	PChainAddrs         map[string]string `json:"pChainAddrs"`
+	CChainPreFundedAddr string            `json:"cChainPreFundedAddr"`
+	CChainAddrs         map[string]string `json:"cChainAddrs"`
 }
 
 const fsModeWrite = 0o600

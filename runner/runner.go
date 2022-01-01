@@ -79,9 +79,9 @@ type localNetwork struct {
 	pchainPreFundedAddr string
 	cchainPreFundedAddr string
 
-	xchainFundedAddrs map[string]string
-	pchainFundedAddrs map[string]string
-	cchainFundedAddrs map[string]string
+	xchainAddrs map[string]string
+	pchainAddrs map[string]string
+	cchainAddrs map[string]string
 
 	subnetTxID   ids.ID // tx ID for "create subnet"
 	blkChainTxID ids.ID // tx ID for "create blockchain"
@@ -174,9 +174,9 @@ func newLocalNetwork(
 		uris:      make(map[string]string),
 		apiClis:   make(map[string]api.Client),
 
-		xchainFundedAddrs: make(map[string]string),
-		pchainFundedAddrs: make(map[string]string),
-		cchainFundedAddrs: make(map[string]string),
+		xchainAddrs: make(map[string]string),
+		pchainAddrs: make(map[string]string),
+		cchainAddrs: make(map[string]string),
 
 		readyc: make(chan struct{}),
 		sigc:   sigc,
@@ -226,13 +226,13 @@ func (lc *localNetwork) start() {
 		lc.errc <- err
 		return
 	}
-	for name, addr := range lc.xchainFundedAddrs {
+	for name, addr := range lc.xchainAddrs {
 		if err := lc.checkXChainAddress(name, addr); err != nil {
 			lc.errc <- err
 			return
 		}
 	}
-	for name, addr := range lc.pchainFundedAddrs {
+	for name, addr := range lc.pchainAddrs {
 		if err := lc.checkPChainAddress(name, addr); err != nil {
 			lc.errc <- err
 			return
@@ -440,16 +440,16 @@ func (lc *localNetwork) createAddresses() error {
 		if err != nil {
 			return fmt.Errorf("failed to create X-chain address: %w in %q", err, nodeName)
 		}
-		lc.xchainFundedAddrs[nodeName] = xAddr
+		lc.xchainAddrs[nodeName] = xAddr
 
 		color.Blue("creating P-chain address")
 		pAddr, err := cli.PChainAPI().CreateAddress(userPass)
 		if err != nil {
 			return fmt.Errorf("failed to create P-chain address: %w in %q", err, nodeName)
 		}
-		lc.pchainFundedAddrs[nodeName] = pAddr
+		lc.pchainAddrs[nodeName] = pAddr
 	}
-	color.Blue("created addresses: X-chain %q, P-chain %q", lc.xchainFundedAddrs, lc.pchainFundedAddrs)
+	color.Blue("created addresses: X-chain %q, P-chain %q", lc.xchainAddrs, lc.pchainAddrs)
 	return nil
 }
 
@@ -823,10 +823,16 @@ func (lc *localNetwork) writeOutput() error {
 	pid := os.Getpid()
 	color.Blue("writing output %q with PID %d", lc.outputPath, pid)
 	ci := ClusterInfo{
-		URIs:     lc.getURIs(),
-		Endpoint: fmt.Sprintf("/ext/bc/%s", lc.blkChainTxID),
-		PID:      pid,
-		LogsDir:  lc.logsDir,
+		URIs:                lc.getURIs(),
+		Endpoint:            fmt.Sprintf("/ext/bc/%s", lc.blkChainTxID),
+		PID:                 pid,
+		LogsDir:             lc.logsDir,
+		XChainPreFundedAddr: lc.xchainPreFundedAddr,
+		XChainAddrs:         lc.xchainAddrs,
+		PChainPreFundedAddr: lc.pchainPreFundedAddr,
+		PChainAddrs:         lc.pchainAddrs,
+		CChainPreFundedAddr: lc.cchainPreFundedAddr,
+		CChainAddrs:         lc.cchainAddrs,
 	}
 	err := ci.Save(lc.outputPath)
 	if err != nil {
