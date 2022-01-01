@@ -20,6 +20,7 @@ import (
 	"github.com/ava-labs/avalanche-network-runner/network/node"
 	avago_api "github.com/ava-labs/avalanchego/api"
 	"github.com/ava-labs/avalanchego/ids"
+	"github.com/ava-labs/avalanchego/snow/choices"
 	avago_constants "github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/vms/platformvm"
@@ -74,9 +75,13 @@ type localNetwork struct {
 	uris      map[string]string
 	apiClis   map[string]api.Client
 
-	xchainFundedAddr string
-	pchainFundedAddr string
-	cchainFundedAddr string
+	xchainPreFundedAddr string
+	pchainPreFundedAddr string
+	cchainPreFundedAddr string
+
+	xchainFundedAddrs map[string]string
+	pchainFundedAddrs map[string]string
+	cchainFundedAddrs map[string]string
 
 	subnetTxID   ids.ID // tx ID for "create subnet"
 	blkChainTxID ids.ID // tx ID for "create blockchain"
@@ -169,6 +174,10 @@ func newLocalNetwork(
 		uris:      make(map[string]string),
 		apiClis:   make(map[string]api.Client),
 
+		xchainFundedAddrs: make(map[string]string),
+		pchainFundedAddrs: make(map[string]string),
+		cchainFundedAddrs: make(map[string]string),
+
 		readyc: make(chan struct{}),
 		sigc:   sigc,
 		stopc:  make(chan struct{}),
@@ -203,43 +212,76 @@ func (lc *localNetwork) start() {
 		lc.errc <- err
 		return
 	}
+	for _, name := range lc.nodeNames {
+		if err := lc.checkXChainAddress(name, lc.xchainPreFundedAddr); err != nil {
+			lc.errc <- err
+			return
+		}
+		if err := lc.checkPChainAddress(name, lc.pchainPreFundedAddr); err != nil {
+			lc.errc <- err
+			return
+		}
+	}
+	if err := lc.createAddresses(); err != nil {
+		lc.errc <- err
+		return
+	}
+	for name, addr := range lc.xchainFundedAddrs {
+		if err := lc.checkXChainAddress(name, addr); err != nil {
+			lc.errc <- err
+			return
+		}
+	}
+	for name, addr := range lc.pchainFundedAddrs {
+		if err := lc.checkPChainAddress(name, addr); err != nil {
+			lc.errc <- err
+			return
+		}
+	}
+	if err := lc.transferFunds(); err != nil {
+		lc.errc <- err
+		return
+	}
 
-	if err := lc.createSubnet(); err != nil {
-		lc.errc <- err
-		return
-	}
-	for _, name := range lc.nodeNames {
-		if err := lc.checkPChainTx(name, lc.subnetTxID); err != nil {
+	enableSubnet := lc.vmID != "" && lc.vmGenesisPath != ""
+	if enableSubnet {
+		if err := lc.createSubnet(); err != nil {
 			lc.errc <- err
 			return
 		}
-		if err := lc.checkSubnet(name); err != nil {
+		for _, name := range lc.nodeNames {
+			if err := lc.checkPChainTx(name, lc.subnetTxID); err != nil {
+				lc.errc <- err
+				return
+			}
+			if err := lc.checkSubnet(name); err != nil {
+				lc.errc <- err
+				return
+			}
+		}
+		if err := lc.addSubnetValidators(); err != nil {
 			lc.errc <- err
 			return
 		}
-	}
-	if err := lc.addSubnetValidators(); err != nil {
-		lc.errc <- err
-		return
-	}
-	if err := lc.createBlockchain(); err != nil {
-		lc.errc <- err
-		return
-	}
-	for _, name := range lc.nodeNames {
-		if err := lc.checkPChainTx(name, lc.blkChainTxID); err != nil {
+		if err := lc.createBlockchain(); err != nil {
 			lc.errc <- err
 			return
 		}
-		if err := lc.checkBlockchain(name); err != nil {
-			lc.errc <- err
-			return
+		for _, name := range lc.nodeNames {
+			if err := lc.checkPChainTx(name, lc.blkChainTxID); err != nil {
+				lc.errc <- err
+				return
+			}
+			if err := lc.checkBlockchain(name); err != nil {
+				lc.errc <- err
+				return
+			}
 		}
-	}
-	for _, name := range lc.nodeNames {
-		if err := lc.checkBootstrapped(name); err != nil {
-			lc.errc <- err
-			return
+		for _, name := range lc.nodeNames {
+			if err := lc.checkBlockchainBootstrapped(name); err != nil {
+				lc.errc <- err
+				return
+			}
 		}
 	}
 
@@ -287,15 +329,15 @@ func (lc *localNetwork) waitForHealthy() error {
 	}
 	lc.nodes = nodes
 
-	for name, node := range nodes {
+	for nodeName, node := range nodes {
 		nodeID := node.GetNodeID().PrefixedString(avago_constants.NodeIDPrefix)
-		lc.nodeIDs[name] = nodeID
+		lc.nodeIDs[nodeName] = nodeID
 
 		uri := fmt.Sprintf("http://%s:%d", node.GetURL(), node.GetAPIPort())
-		lc.uris[name] = uri
+		lc.uris[nodeName] = uri
 
-		lc.apiClis[name] = node.GetAPIClient()
-		color.Cyan("%s: node ID %q, URI %q", name, nodeID, uri)
+		lc.apiClis[nodeName] = node.GetAPIClient()
+		color.Cyan("%s: node ID %q, URI %q", nodeName, nodeID, uri)
 	}
 
 	lc.readycCloseOnce.Do(func() {
@@ -325,10 +367,10 @@ var (
 
 func (lc *localNetwork) createUser() error {
 	color.Blue("setting up the same user in all nodes...")
-	for name, cli := range lc.apiClis {
+	for nodeName, cli := range lc.apiClis {
 		ok, err := cli.KeystoreAPI().CreateUser(userPass)
 		if !ok || err != nil {
-			return fmt.Errorf("failedt to create user: %w in %q", err, name)
+			return fmt.Errorf("failedt to create user: %w in %q", err, nodeName)
 		}
 	}
 	return nil
@@ -336,44 +378,44 @@ func (lc *localNetwork) createUser() error {
 
 func (lc *localNetwork) importKeysAndFunds() error {
 	color.Blue("importing genesis key and funds to the user in all nodes...")
-	for _, name := range lc.nodeNames {
-		cli := lc.apiClis[name]
+	for _, nodeName := range lc.nodeNames {
+		cli := lc.apiClis[nodeName]
 
 		xAddr, err := cli.XChainAPI().ImportKey(userPass, genesisPrivKey)
 		if err != nil {
-			return fmt.Errorf("failed to import genesis key for X-chain: %w in %q", err, name)
+			return fmt.Errorf("failed to import genesis key for X-chain: %w in %q", err, nodeName)
 		}
-		lc.xchainFundedAddr = xAddr
+		lc.xchainPreFundedAddr = xAddr
 		xBalance, err := cli.XChainAPI().GetBalance(xAddr, "AVAX", false)
 		if err != nil {
-			return fmt.Errorf("failed to get X-chain balance: %w in %q", err, name)
+			return fmt.Errorf("failed to get X-chain balance: %w in %q", err, nodeName)
 		}
-		if lc.xchainFundedAddr != expectedXchainFundedAddr {
-			return fmt.Errorf("unexpected X-chain funded address %q (expected %q)", lc.xchainFundedAddr, expectedXchainFundedAddr)
+		if lc.xchainPreFundedAddr != expectedXchainFundedAddr {
+			return fmt.Errorf("unexpected X-chain funded address %q (expected %q)", lc.xchainPreFundedAddr, expectedXchainFundedAddr)
 		}
-		color.Cyan("funded X-chain: address %q, balance %d $AVAX in %q", xAddr, xBalance.Balance, name)
+		color.Cyan("funded X-chain: address %q, balance %d $AVAX in %q", xAddr, xBalance.Balance, nodeName)
 
 		pAddr, err := cli.PChainAPI().ImportKey(userPass, genesisPrivKey)
 		if err != nil {
-			return fmt.Errorf("failed to import genesis key for P-chain: %w in %q", err, name)
+			return fmt.Errorf("failed to import genesis key for P-chain: %w in %q", err, nodeName)
 		}
-		lc.pchainFundedAddr = pAddr
-		if lc.pchainFundedAddr != expectedPchainFundedAddr {
-			return fmt.Errorf("unexpected P-chain funded address %q (expected %q)", lc.pchainFundedAddr, expectedPchainFundedAddr)
+		lc.pchainPreFundedAddr = pAddr
+		if lc.pchainPreFundedAddr != expectedPchainFundedAddr {
+			return fmt.Errorf("unexpected P-chain funded address %q (expected %q)", lc.pchainPreFundedAddr, expectedPchainFundedAddr)
 		}
 		pBalance, err := cli.PChainAPI().GetBalance(pAddr)
 		if err != nil {
-			return fmt.Errorf("failed to get P-chain balance: %w in %q", err, name)
+			return fmt.Errorf("failed to get P-chain balance: %w in %q", err, nodeName)
 		}
-		color.Cyan("funded P-chain: address %q, balance %d $AVAX in %q", pAddr, pBalance.Balance, name)
+		color.Cyan("funded P-chain: address %q, balance %d $AVAX in %q", pAddr, pBalance.Balance, nodeName)
 
 		cAddr, err := cli.CChainAPI().ImportKey(userPass, genesisPrivKey)
 		if err != nil {
-			return fmt.Errorf("failed to import genesis key for P-chain: %w in %q", err, name)
+			return fmt.Errorf("failed to import genesis key for P-chain: %w in %q", err, nodeName)
 		}
-		lc.cchainFundedAddr = cAddr
-		if lc.cchainFundedAddr != expectedCchainFundedAddr {
-			return fmt.Errorf("unexpected C-chain funded address %q (expected %q)", lc.cchainFundedAddr, expectedCchainFundedAddr)
+		lc.cchainPreFundedAddr = cAddr
+		if lc.cchainPreFundedAddr != expectedCchainFundedAddr {
+			return fmt.Errorf("unexpected C-chain funded address %q (expected %q)", lc.cchainPreFundedAddr, expectedCchainFundedAddr)
 		}
 
 		// TODO: not working?
@@ -389,34 +431,152 @@ func (lc *localNetwork) importKeysAndFunds() error {
 	return nil
 }
 
-func (lc *localNetwork) createSubnet() error {
-	color.Blue("creating subnet...")
-	name := lc.nodeNames[0]
-	cli := lc.apiClis[name]
-	subnetTxID, err := cli.PChainAPI().CreateSubnet(
-		userPass,
-		[]string{lc.pchainFundedAddr}, // from
-		lc.pchainFundedAddr,           // changeAddr
-		[]string{lc.pchainFundedAddr}, // controlKeys
-		1,                             // threshold
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create subnet: %w in %q", err, name)
-	}
-	lc.subnetTxID = subnetTxID
-	if lc.subnetTxID.String() != expectedSubnetTxID {
-		return fmt.Errorf("unexpected subnet tx ID %q (expected %q)", lc.subnetTxID, expectedSubnetTxID)
-	}
+func (lc *localNetwork) createAddresses() error {
+	for _, nodeName := range lc.nodeNames {
+		cli := lc.apiClis[nodeName]
 
-	color.Blue("created subnet %q in %q", subnetTxID, name)
+		color.Blue("creating X-chain address")
+		xAddr, err := cli.XChainAPI().CreateAddress(userPass)
+		if err != nil {
+			return fmt.Errorf("failed to create X-chain address: %w in %q", err, nodeName)
+		}
+		lc.xchainFundedAddrs[nodeName] = xAddr
+
+		color.Blue("creating P-chain address")
+		pAddr, err := cli.PChainAPI().CreateAddress(userPass)
+		if err != nil {
+			return fmt.Errorf("failed to create P-chain address: %w in %q", err, nodeName)
+		}
+		lc.pchainFundedAddrs[nodeName] = pAddr
+	}
+	color.Blue("created addresses: X-chain %q, P-chain %q", lc.xchainFundedAddrs, lc.pchainFundedAddrs)
 	return nil
 }
 
-func (lc *localNetwork) checkPChainTx(name string, txID ids.ID) error {
-	color.Blue("checking tx %q in %q", txID, name)
-	cli, ok := lc.apiClis[name]
+func (lc *localNetwork) checkXChainAddress(nodeName string, addr string) error {
+	color.Blue("checking X-chain address %q in %q", addr, nodeName)
+	cli, ok := lc.apiClis[nodeName]
 	if !ok {
-		return fmt.Errorf("%q API client not found", name)
+		return fmt.Errorf("%q API client not found", nodeName)
+	}
+	xcli := cli.XChainAPI()
+
+	ctx, cancel := context.WithTimeout(context.Background(), txConfirmWait)
+	defer cancel()
+	for ctx.Err() == nil {
+		select {
+		case <-lc.stopc:
+			return errAborted
+		case <-time.After(checkInterval):
+		}
+
+		addrs, err := xcli.ListAddresses(userPass)
+		if err != nil {
+			color.Yellow("failed to list addresses %v in %q", err, nodeName)
+			continue
+		}
+		found := false
+		for _, a := range addrs {
+			if a == addr {
+				found = true
+				break
+			}
+		}
+		if !found {
+			color.Yellow("failed to find address %q in %q (got %q)", addr, nodeName, addrs)
+			continue
+		}
+
+		color.Cyan("confirmed address %q in %q (got %q)", addr, nodeName, addrs)
+		return nil
+	}
+	return ctx.Err()
+}
+
+func (lc *localNetwork) checkPChainAddress(nodeName string, addr string) error {
+	color.Blue("checking P-chain address %q in %q", addr, nodeName)
+	cli, ok := lc.apiClis[nodeName]
+	if !ok {
+		return fmt.Errorf("%q API client not found", nodeName)
+	}
+	pcli := cli.PChainAPI()
+
+	ctx, cancel := context.WithTimeout(context.Background(), txConfirmWait)
+	defer cancel()
+	for ctx.Err() == nil {
+		select {
+		case <-lc.stopc:
+			return errAborted
+		case <-time.After(checkInterval):
+		}
+
+		addrs, err := pcli.ListAddresses(userPass)
+		if err != nil {
+			color.Yellow("failed to list addresses %v in %q", err, nodeName)
+			continue
+		}
+		found := false
+		for _, a := range addrs {
+			if a == addr {
+				found = true
+				break
+			}
+		}
+		if !found {
+			color.Yellow("failed to find address %q in %q (got %q)", err, nodeName, addrs)
+			continue
+		}
+
+		color.Cyan("confirmed address %q in %q (got %q)", addr, nodeName, addrs)
+		return nil
+	}
+	return ctx.Err()
+}
+
+func (lc *localNetwork) transferFunds() error {
+	color.Blue("transfering funds...")
+
+	return nil
+}
+
+func (lc *localNetwork) checkXChainTx(nodeName string, txID ids.ID) error {
+	color.Blue("checking X-chain tx %q in %q", txID, nodeName)
+	cli, ok := lc.apiClis[nodeName]
+	if !ok {
+		return fmt.Errorf("%q API client not found", nodeName)
+	}
+	xcli := cli.XChainAPI()
+
+	ctx, cancel := context.WithTimeout(context.Background(), txConfirmWait)
+	defer cancel()
+	for ctx.Err() == nil {
+		select {
+		case <-lc.stopc:
+			return errAborted
+		case <-time.After(checkInterval):
+		}
+
+		status, err := xcli.GetTxStatus(txID)
+		if err != nil {
+			color.Yellow("failed to get tx status %v in %q", err, nodeName)
+			continue
+		}
+		if status != choices.Accepted {
+			color.Yellow("subnet tx %s status %q in %q", txID, status, nodeName)
+			continue
+		}
+
+		color.Cyan("confirmed tx %q %q in %q", txID, status, nodeName)
+		return nil
+	}
+	return ctx.Err()
+}
+
+func (lc *localNetwork) checkPChainTx(nodeName string, txID ids.ID) error {
+	color.Blue("checking P-chain tx %q in %q", txID, nodeName)
+	cli, ok := lc.apiClis[nodeName]
+	if !ok {
+		return fmt.Errorf("%q API client not found", nodeName)
 	}
 	pcli := cli.PChainAPI()
 
@@ -431,25 +591,48 @@ func (lc *localNetwork) checkPChainTx(name string, txID ids.ID) error {
 
 		status, err := pcli.GetTxStatus(txID, true)
 		if err != nil {
-			color.Yellow("failed to get tx status %v in %q", err, name)
+			color.Yellow("failed to get tx status %v in %q", err, nodeName)
 			continue
 		}
 		if status.Status != platformvm.Committed {
-			color.Yellow("subnet tx %s status %q in %q", txID, status.Status, name)
+			color.Yellow("subnet tx %s status %q in %q", txID, status.Status, nodeName)
 			continue
 		}
 
-		color.Cyan("confirmed tx %q %q in %q", txID, status.Status, name)
+		color.Cyan("confirmed tx %q %q in %q", txID, status.Status, nodeName)
 		return nil
 	}
 	return ctx.Err()
 }
 
-func (lc *localNetwork) checkSubnet(name string) error {
-	color.Blue("checking subnet exists %q in %q", lc.subnetTxID, name)
-	cli, ok := lc.apiClis[name]
+func (lc *localNetwork) createSubnet() error {
+	color.Blue("creating subnet...")
+	nodeName := lc.nodeNames[0]
+	cli := lc.apiClis[nodeName]
+	subnetTxID, err := cli.PChainAPI().CreateSubnet(
+		userPass,
+		[]string{lc.pchainPreFundedAddr}, // from
+		lc.pchainPreFundedAddr,           // changeAddr
+		[]string{lc.pchainPreFundedAddr}, // controlKeys
+		1,                                // threshold
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create subnet: %w in %q", err, nodeName)
+	}
+	lc.subnetTxID = subnetTxID
+	if lc.subnetTxID.String() != expectedSubnetTxID {
+		return fmt.Errorf("unexpected subnet tx ID %q (expected %q)", lc.subnetTxID, expectedSubnetTxID)
+	}
+
+	color.Blue("created subnet %q in %q", subnetTxID, nodeName)
+	return nil
+}
+
+func (lc *localNetwork) checkSubnet(nodeName string) error {
+	color.Blue("checking subnet exists %q in %q", lc.subnetTxID, nodeName)
+	cli, ok := lc.apiClis[nodeName]
 	if !ok {
-		return fmt.Errorf("%q API client not found", name)
+		return fmt.Errorf("%q API client not found", nodeName)
 	}
 	pcli := cli.PChainAPI()
 
@@ -464,7 +647,7 @@ func (lc *localNetwork) checkSubnet(name string) error {
 
 		subnets, err := pcli.GetSubnets([]ids.ID{})
 		if err != nil {
-			color.Yellow("failed to get subnets %v in %q", err, name)
+			color.Yellow("failed to get subnets %v in %q", err, nodeName)
 			continue
 		}
 
@@ -472,17 +655,17 @@ func (lc *localNetwork) checkSubnet(name string) error {
 		for _, sub := range subnets {
 			if sub.ID == lc.subnetTxID {
 				found = true
-				color.Cyan("%q returned expected subnet ID %q", name, sub.ID)
+				color.Cyan("%q returned expected subnet ID %q", nodeName, sub.ID)
 				break
 			}
-			color.Yellow("%q returned unexpected subnet ID %q", name, sub.ID)
+			color.Yellow("%q returned unexpected subnet ID %q", nodeName, sub.ID)
 		}
 		if !found {
-			color.Yellow("%q does not have subnet %q", name, lc.subnetTxID)
+			color.Yellow("%q does not have subnet %q", nodeName, lc.subnetTxID)
 			continue
 		}
 
-		color.Cyan("confirmed subnet exists %q in %q", lc.subnetTxID, name)
+		color.Cyan("confirmed subnet exists %q in %q", lc.subnetTxID, nodeName)
 		return nil
 	}
 	return ctx.Err()
@@ -490,24 +673,24 @@ func (lc *localNetwork) checkSubnet(name string) error {
 
 func (lc *localNetwork) addSubnetValidators() error {
 	color.Blue("adding subnet validator...")
-	for name, cli := range lc.apiClis {
+	for nodeName, cli := range lc.apiClis {
 		valTxID, err := cli.PChainAPI().AddSubnetValidator(
 			userPass,
-			[]string{lc.pchainFundedAddr}, // from
-			lc.pchainFundedAddr,           // changeAddr
-			lc.subnetTxID.String(),        // subnetID
-			lc.nodeIDs[name],              // nodeID
-			validatorWeight,               // stakeAmount
+			[]string{lc.pchainPreFundedAddr}, // from
+			lc.pchainPreFundedAddr,           // changeAddr
+			lc.subnetTxID.String(),           // subnetID
+			lc.nodeIDs[nodeName],             // nodeID
+			validatorWeight,                  // stakeAmount
 			uint64(time.Now().Add(validatorStartDiff).Unix()), // startTime
 			uint64(time.Now().Add(validatorEndDiff).Unix()),   // endTime
 		)
 		if err != nil {
-			return fmt.Errorf("failed to add subnet validator: %w in %q", err, name)
+			return fmt.Errorf("failed to add subnet validator: %w in %q", err, nodeName)
 		}
-		if err := lc.checkPChainTx(name, valTxID); err != nil {
+		if err := lc.checkPChainTx(nodeName, valTxID); err != nil {
 			return err
 		}
-		color.Cyan("added subnet validator %q in %q", valTxID, name)
+		color.Cyan("added subnet validator %q in %q", valTxID, nodeName)
 	}
 	return nil
 }
@@ -522,13 +705,13 @@ func (lc *localNetwork) createBlockchain() error {
 	for name, cli := range lc.apiClis {
 		blkChainTxID, err := cli.PChainAPI().CreateBlockchain(
 			userPass,
-			[]string{lc.pchainFundedAddr}, // from
-			lc.pchainFundedAddr,           // changeAddr
-			lc.subnetTxID,                 // subnetID
-			lc.vmID,                       // vmID
-			[]string{},                    // fxIDs
-			lc.vmName,                     // name
-			vmGenesis,                     // genesisData
+			[]string{lc.pchainPreFundedAddr}, // from
+			lc.pchainPreFundedAddr,           // changeAddr
+			lc.subnetTxID,                    // subnetID
+			lc.vmID,                          // vmID
+			[]string{},                       // fxIDs
+			lc.vmName,                        // name
+			vmGenesis,                        // genesisData
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create blockchain: %w in %q", err, name)
@@ -540,11 +723,11 @@ func (lc *localNetwork) createBlockchain() error {
 	return nil
 }
 
-func (lc *localNetwork) checkBlockchain(name string) error {
-	color.Blue("checking blockchain exists %q in %q", lc.blkChainTxID, name)
-	cli, ok := lc.apiClis[name]
+func (lc *localNetwork) checkBlockchain(nodeName string) error {
+	color.Blue("checking blockchain exists %q in %q", lc.blkChainTxID, nodeName)
+	cli, ok := lc.apiClis[nodeName]
 	if !ok {
-		return fmt.Errorf("%q API client not found", name)
+		return fmt.Errorf("%q API client not found", nodeName)
 	}
 	pcli := cli.PChainAPI()
 
@@ -559,7 +742,7 @@ func (lc *localNetwork) checkBlockchain(name string) error {
 
 		blockchains, err := pcli.GetBlockchains()
 		if err != nil {
-			color.Yellow("failed to get blockchains %v in %q", err, name)
+			color.Yellow("failed to get blockchains %v in %q", err, nodeName)
 			continue
 		}
 		blockchainID := ids.Empty
@@ -570,35 +753,35 @@ func (lc *localNetwork) checkBlockchain(name string) error {
 			}
 		}
 		if blockchainID == ids.Empty {
-			color.Yellow("failed to get blockchain ID in %q", name)
+			color.Yellow("failed to get blockchain ID in %q", nodeName)
 			continue
 		}
 		if lc.blkChainTxID != blockchainID {
-			color.Yellow("unexpected blockchain ID %q in %q (expected %q)", name, lc.blkChainTxID)
+			color.Yellow("unexpected blockchain ID %q in %q (expected %q)", nodeName, lc.blkChainTxID)
 			continue
 		}
 
 		status, err := pcli.GetBlockchainStatus(blockchainID.String())
 		if err != nil {
-			color.Yellow("failed to get blockchain status %v in %q", err, name)
+			color.Yellow("failed to get blockchain status %v in %q", err, nodeName)
 			continue
 		}
 		if status != platformvm.Validating {
-			color.Yellow("blockchain status %q in %q, retrying", status, name)
+			color.Yellow("blockchain status %q in %q, retrying", status, nodeName)
 			continue
 		}
 
-		color.Cyan("confirmed blockchain exists and status %q in %q", status, name)
+		color.Cyan("confirmed blockchain exists and status %q in %q", status, nodeName)
 		return nil
 	}
 	return ctx.Err()
 }
 
-func (lc *localNetwork) checkBootstrapped(name string) error {
-	color.Blue("checking blockchain bootstrapped %q in %q", lc.blkChainTxID, name)
-	cli, ok := lc.apiClis[name]
+func (lc *localNetwork) checkBlockchainBootstrapped(nodeName string) error {
+	color.Blue("checking blockchain bootstrapped %q in %q", lc.blkChainTxID, nodeName)
+	cli, ok := lc.apiClis[nodeName]
 	if !ok {
-		return fmt.Errorf("%q API client not found", name)
+		return fmt.Errorf("%q API client not found", nodeName)
 	}
 	icli := cli.InfoAPI()
 
@@ -613,15 +796,15 @@ func (lc *localNetwork) checkBootstrapped(name string) error {
 
 		bootstrapped, err := icli.IsBootstrapped(lc.blkChainTxID.String())
 		if err != nil {
-			color.Yellow("failed to check blockchain bootstrapped %v in %q", err, name)
+			color.Yellow("failed to check blockchain bootstrapped %v in %q", err, nodeName)
 			continue
 		}
 		if !bootstrapped {
-			color.Yellow("blockchain %q in %q not bootstrapped yet", lc.blkChainTxID, name)
+			color.Yellow("blockchain %q in %q not bootstrapped yet", lc.blkChainTxID, nodeName)
 			continue
 		}
 
-		color.Cyan("confirmed blockchain bootstrapped %q in %q", lc.blkChainTxID, name)
+		color.Cyan("confirmed blockchain bootstrapped %q in %q", lc.blkChainTxID, nodeName)
 		return nil
 	}
 	return ctx.Err()
