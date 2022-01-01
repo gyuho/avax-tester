@@ -8,6 +8,8 @@ import (
 	avago_api "github.com/ava-labs/avalanchego/api"
 	"github.com/ava-labs/avalanchego/utils/crypto"
 	"github.com/ava-labs/avalanchego/utils/formatting"
+	"github.com/ava-labs/coreth/ethclient"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/fatih/color"
 )
 
@@ -96,13 +98,21 @@ func (lc *localNetwork) fundWithEwoq() error {
 			return fmt.Errorf("unexpected C-chain funded address %q (expected %q)", lc.cchainPreFundedAddr, expectedCchainEwoqAddr)
 		}
 
-		// ctx, cancel := context.WithTimeout(context.Background(), txConfirmWait)
+		// TODO: timeout
+		// failed to get tx status problem while making JSON RPC POST request to http://localhost:53859/ext/P: Post "http://localhost:53859/ext/P": context deadline exceeded
 		// cBalance, err := cli.CChainEthAPI().BalanceAt(ctx, common.HexToAddress(cAddr), nil)
-		// cancel()
-		// if err != nil {
-		// 	return fmt.Errorf("failed to get C-chain balance: %w in %q", err, name)
-		// }
-		// color.Cyan("funded C-chain address: %q, balance $AVAX %d in %q", cAddr, cBalance.Int64(), name)
+
+		ethCli, err := ethclient.Dial(fmt.Sprintf("%s/ext/bc/C/rpc", lc.uris[nodeName]))
+		if err != nil {
+			return fmt.Errorf("failed to dial %q (%w)", nodeName, err)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		cBalance, err := ethCli.BalanceAt(ctx, common.HexToAddress(cAddr), nil)
+		cancel()
+		if err != nil {
+			return fmt.Errorf("failed to get C-chain balance: %w in %q", err, nodeName)
+		}
+		color.Cyan("funded C-chain address: %q, balance $AVAX %d in %q", cAddr, cBalance.Int64(), nodeName)
 	}
 
 	return nil
@@ -208,4 +218,13 @@ func (lc *localNetwork) checkPChainAddress(nodeName string, addr string) error {
 		return nil
 	}
 	return ctx.Err()
+}
+
+func generateKey() (*crypto.PrivateKeySECP256K1R, error) {
+	factory := &crypto.FactorySECP256K1R{}
+	pk, err := factory.NewPrivateKey()
+	if err != nil {
+		return nil, err
+	}
+	return pk.(*crypto.PrivateKeySECP256K1R), nil
 }
