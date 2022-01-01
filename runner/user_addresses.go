@@ -6,25 +6,42 @@ import (
 	"time"
 
 	avago_api "github.com/ava-labs/avalanchego/api"
+	"github.com/ava-labs/avalanchego/utils/crypto"
+	"github.com/ava-labs/avalanchego/utils/formatting"
 	"github.com/fatih/color"
 )
 
-var (
-	// need to hard-code user-pass in order to
-	// determine subnet ID for whitelisting
-	userPass = avago_api.UserPass{
-		Username: "test",
-		Password: "vmsrkewl",
-	}
-)
+// need to hard-code user-pass in order to
+// determine subnet ID for whitelisting
+var userPass = avago_api.UserPass{
+	Username: "testuser",
+	Password: "testinsecurerandomvmavax",
+}
 
 const (
-	// expected response from "ImportKey"
-	// based on hard-coded "userPass" and "genesisPrivKey"
-	expectedXchainFundedAddr = "X-custom18jma8ppw3nhx5r4ap8clazz0dps7rv5u9xde7p"
-	expectedPchainFundedAddr = "P-custom18jma8ppw3nhx5r4ap8clazz0dps7rv5u9xde7p"
-	expectedCchainFundedAddr = "0x8db97C7cEcE249c2b98bDC0226Cc4C2A57BF52FC"
+	rawEwoqPk = "ewoqjP7PxY4yr3iLTpLisriqt94hdyDFNgchSxGGztUrTXtNN"
+	ewoqPk    = "PrivateKey-" + rawEwoqPk
+
+	// expected response from "ImportKey" based on hard-coded "ewoqPk"
+	expectedXchainEwoqAddr = "X-custom18jma8ppw3nhx5r4ap8clazz0dps7rv5u9xde7p"
+	expectedPchainEwoqAddr = "P-custom18jma8ppw3nhx5r4ap8clazz0dps7rv5u9xde7p"
+	expectedCchainEwoqAddr = "0x8db97C7cEcE249c2b98bDC0226Cc4C2A57BF52FC"
 )
+
+var ewoqPrivateKey crypto.PrivateKey
+
+func init() {
+	skBytes, err := formatting.Decode(formatting.CB58, rawEwoqPk)
+	if err != nil {
+		panic(err)
+	}
+	factory := &crypto.FactorySECP256K1R{}
+	ewoqPrivateKey, err = factory.ToPrivateKey(skBytes)
+	if err != nil {
+		panic(err)
+	}
+	color.Blue("loaded ewoq private key %q", ewoqPrivateKey.PublicKey().Address().Hex())
+}
 
 func (lc *localNetwork) createUser() error {
 	color.Blue("setting up the same user in all nodes...")
@@ -37,12 +54,12 @@ func (lc *localNetwork) createUser() error {
 	return nil
 }
 
-func (lc *localNetwork) importKeysAndFunds() error {
+func (lc *localNetwork) fundWithEwoq() error {
 	color.Blue("importing genesis key and funds to the user in all nodes...")
 	for _, nodeName := range lc.nodeNames {
 		cli := lc.apiClis[nodeName]
 
-		xAddr, err := cli.XChainAPI().ImportKey(userPass, genesisPrivKey)
+		xAddr, err := cli.XChainAPI().ImportKey(userPass, ewoqPk)
 		if err != nil {
 			return fmt.Errorf("failed to import genesis key for X-chain: %w in %q", err, nodeName)
 		}
@@ -51,42 +68,41 @@ func (lc *localNetwork) importKeysAndFunds() error {
 		if err != nil {
 			return fmt.Errorf("failed to get X-chain balance: %w in %q", err, nodeName)
 		}
-		if lc.xchainPreFundedAddr != expectedXchainFundedAddr {
-			return fmt.Errorf("unexpected X-chain funded address %q (expected %q)", lc.xchainPreFundedAddr, expectedXchainFundedAddr)
+		if lc.xchainPreFundedAddr != expectedXchainEwoqAddr {
+			return fmt.Errorf("unexpected X-chain funded address %q (expected %q)", lc.xchainPreFundedAddr, expectedXchainEwoqAddr)
 		}
-		color.Cyan("funded X-chain: address %q, balance %d $AVAX in %q", xAddr, xBalance.Balance, nodeName)
+		color.Cyan("funded X-chain: address %q, balance $AVAX %d in %q", xAddr, xBalance.Balance, nodeName)
 
-		pAddr, err := cli.PChainAPI().ImportKey(userPass, genesisPrivKey)
+		pAddr, err := cli.PChainAPI().ImportKey(userPass, ewoqPk)
 		if err != nil {
 			return fmt.Errorf("failed to import genesis key for P-chain: %w in %q", err, nodeName)
 		}
 		lc.pchainPreFundedAddr = pAddr
-		if lc.pchainPreFundedAddr != expectedPchainFundedAddr {
-			return fmt.Errorf("unexpected P-chain funded address %q (expected %q)", lc.pchainPreFundedAddr, expectedPchainFundedAddr)
+		if lc.pchainPreFundedAddr != expectedPchainEwoqAddr {
+			return fmt.Errorf("unexpected P-chain funded address %q (expected %q)", lc.pchainPreFundedAddr, expectedPchainEwoqAddr)
 		}
 		pBalance, err := cli.PChainAPI().GetBalance(pAddr)
 		if err != nil {
 			return fmt.Errorf("failed to get P-chain balance: %w in %q", err, nodeName)
 		}
-		color.Cyan("funded P-chain: address %q, balance %d $AVAX in %q", pAddr, pBalance.Balance, nodeName)
+		color.Cyan("funded P-chain: address %q, balance $AVAX %d in %q", pAddr, pBalance.Balance, nodeName)
 
-		cAddr, err := cli.CChainAPI().ImportKey(userPass, genesisPrivKey)
+		cAddr, err := cli.CChainAPI().ImportKey(userPass, ewoqPk)
 		if err != nil {
 			return fmt.Errorf("failed to import genesis key for P-chain: %w in %q", err, nodeName)
 		}
 		lc.cchainPreFundedAddr = cAddr
-		if lc.cchainPreFundedAddr != expectedCchainFundedAddr {
-			return fmt.Errorf("unexpected C-chain funded address %q (expected %q)", lc.cchainPreFundedAddr, expectedCchainFundedAddr)
+		if lc.cchainPreFundedAddr != expectedCchainEwoqAddr {
+			return fmt.Errorf("unexpected C-chain funded address %q (expected %q)", lc.cchainPreFundedAddr, expectedCchainEwoqAddr)
 		}
 
-		// TODO: not working?
 		// ctx, cancel := context.WithTimeout(context.Background(), txConfirmWait)
 		// cBalance, err := cli.CChainEthAPI().BalanceAt(ctx, common.HexToAddress(cAddr), nil)
 		// cancel()
 		// if err != nil {
 		// 	return fmt.Errorf("failed to get C-chain balance: %w in %q", err, name)
 		// }
-		// color.Cyan("funded C-chain address: %q, balance %d $AVAX in %q", cAddr, cBalance.Int64(), name)
+		// color.Cyan("funded C-chain address: %q, balance $AVAX %d in %q", cAddr, cBalance.Int64(), name)
 	}
 
 	return nil

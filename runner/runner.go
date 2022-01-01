@@ -205,7 +205,7 @@ func (lc *localNetwork) start() {
 		lc.errc <- err
 		return
 	}
-	if err := lc.importKeysAndFunds(); err != nil {
+	if err := lc.fundWithEwoq(); err != nil {
 		lc.errc <- err
 		return
 	}
@@ -289,14 +289,7 @@ func (lc *localNetwork) start() {
 	}
 }
 
-const (
-	genesisPrivKey = "PrivateKey-ewoqjP7PxY4yr3iLTpLisriqt94hdyDFNgchSxGGztUrTXtNN"
-
-	healthyWait   = 2 * time.Minute
-	txConfirmWait = time.Minute
-
-	checkInterval = time.Second
-)
+const healthyWait = 2 * time.Minute
 
 var errAborted = errors.New("aborted")
 

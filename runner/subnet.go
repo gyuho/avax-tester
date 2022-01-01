@@ -12,6 +12,9 @@ import (
 )
 
 const (
+	txConfirmWait = time.Minute
+	checkInterval = time.Second
+
 	validatorWeight    = 50
 	validatorStartDiff = 30 * time.Second
 	validatorEndDiff   = 30 * 24 * time.Hour // 30 days
@@ -22,8 +25,8 @@ const (
 )
 
 func (lc *localNetwork) createSubnet() error {
-	color.Blue("creating subnet...")
 	nodeName := lc.nodeNames[0]
+	color.Blue("creating subnet in %q", nodeName)
 	cli := lc.apiClis[nodeName]
 	subnetTxID, err := cli.PChainAPI().CreateSubnet(
 		userPass,
