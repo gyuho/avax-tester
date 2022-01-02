@@ -30,10 +30,10 @@ func (lc *localNetwork) createSubnet() error {
 	cli := lc.apiClis[nodeName]
 	subnetTxID, err := cli.PChainAPI().CreateSubnet(
 		userPass,
-		[]string{lc.pchainPreFundedAddr}, // from
-		lc.pchainPreFundedAddr,           // changeAddr
-		[]string{lc.pchainPreFundedAddr}, // controlKeys
-		1,                                // threshold
+		[]string{lc.ewoqPChainAddr}, // from
+		lc.ewoqPChainAddr,           // changeAddr
+		[]string{lc.ewoqPChainAddr}, // controlKeys
+		1,                           // threshold
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create subnet: %w in %q", err, nodeName)
@@ -95,11 +95,11 @@ func (lc *localNetwork) addSubnetValidators() error {
 	for nodeName, cli := range lc.apiClis {
 		valTxID, err := cli.PChainAPI().AddSubnetValidator(
 			userPass,
-			[]string{lc.pchainPreFundedAddr}, // from
-			lc.pchainPreFundedAddr,           // changeAddr
-			lc.subnetTxID.String(),           // subnetID
-			lc.nodeIDs[nodeName],             // nodeID
-			validatorWeight,                  // stakeAmount
+			[]string{lc.ewoqPChainAddr}, // from
+			lc.ewoqPChainAddr,           // changeAddr
+			lc.subnetTxID.String(),      // subnetID
+			lc.nodeIDs[nodeName],        // nodeID
+			validatorWeight,             // stakeAmount
 			uint64(time.Now().Add(validatorStartDiff).Unix()), // startTime
 			uint64(time.Now().Add(validatorEndDiff).Unix()),   // endTime
 		)
@@ -124,13 +124,13 @@ func (lc *localNetwork) createBlockchain() error {
 	for name, cli := range lc.apiClis {
 		blkChainTxID, err := cli.PChainAPI().CreateBlockchain(
 			userPass,
-			[]string{lc.pchainPreFundedAddr}, // from
-			lc.pchainPreFundedAddr,           // changeAddr
-			lc.subnetTxID,                    // subnetID
-			lc.vmID,                          // vmID
-			[]string{},                       // fxIDs
-			lc.vmName,                        // name
-			vmGenesis,                        // genesisData
+			[]string{lc.ewoqPChainAddr}, // from
+			lc.ewoqPChainAddr,           // changeAddr
+			lc.subnetTxID,               // subnetID
+			lc.vmID,                     // vmID
+			[]string{},                  // fxIDs
+			lc.vmName,                   // name
+			vmGenesis,                   // genesisData
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create blockchain: %w in %q", err, name)

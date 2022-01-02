@@ -183,8 +183,8 @@ step 3. get the list of addresses for the pre-funded key
 		fmt.Fprintln(os.Stderr, "unexpected rr.Result", reflect.TypeOf(rr.Result))
 		panic(1)
 	}
-	xChainAddresses, _ := rm["addresses"].([]interface{})
-	if xChainAddress != fmt.Sprint(xChainAddresses[0]) {
+	XChainSecondaryAddresses, _ := rm["addresses"].([]interface{})
+	if xChainAddress != fmt.Sprint(XChainSecondaryAddresses[0]) {
 		fmt.Fprintf(os.Stderr, "unexpected xChainAddress %v, expected %q\n", xChainAddress[0], xChainAddress)
 		panic(1)
 	}
@@ -205,8 +205,8 @@ step 3. get the list of addresses for the pre-funded key
 		fmt.Fprintln(os.Stderr, "unexpected rr.Result", reflect.TypeOf(rr.Result))
 		panic(1)
 	}
-	pChainAddresses, _ := rm["addresses"].([]interface{})
-	if pChainAddress != fmt.Sprint(pChainAddresses[0]) {
+	PChainSecondaryAddresses, _ := rm["addresses"].([]interface{})
+	if pChainAddress != fmt.Sprint(PChainSecondaryAddresses[0]) {
 		fmt.Fprintf(os.Stderr, "unexpected pChainAddress %v, expected %q\n", pChainAddress[0], xChainAddress)
 		panic(1)
 	}

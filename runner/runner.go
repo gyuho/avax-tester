@@ -72,13 +72,17 @@ type localNetwork struct {
 	uris      map[string]string
 	apiClis   map[string]api.Client
 
-	xchainPreFundedAddr string
-	pchainPreFundedAddr string
-	cchainPreFundedAddr string
+	ewoqXChainAddr string
+	ewoqXChainBal  uint64
+	ewoqPChainAddr string
+	ewoqPChainBal  uint64
+	ewoqCChainAddr string
+	ewoqCChainBal  uint64
 
-	xchainAddrs map[string]string
-	pchainAddrs map[string]string
-	cchainAddrs map[string]string
+	xChainSecondaryAddrs map[string]string
+	pChainSecondaryAddrs map[string]string
+
+	wallets []*wallet
 
 	subnetTxID   ids.ID // tx ID for "create subnet"
 	blkChainTxID ids.ID // tx ID for "create blockchain"
@@ -171,9 +175,8 @@ func newLocalNetwork(
 		uris:      make(map[string]string),
 		apiClis:   make(map[string]api.Client),
 
-		xchainAddrs: make(map[string]string),
-		pchainAddrs: make(map[string]string),
-		cchainAddrs: make(map[string]string),
+		xChainSecondaryAddrs: make(map[string]string),
+		pChainSecondaryAddrs: make(map[string]string),
 
 		readyc: make(chan struct{}),
 		sigc:   sigc,
@@ -205,37 +208,49 @@ func (lc *localNetwork) start() {
 		lc.errc <- err
 		return
 	}
-	if err := lc.fundWithEwoq(); err != nil {
+	if err := lc.createSecondaryAddresses(); err != nil {
 		lc.errc <- err
 		return
 	}
-	for _, name := range lc.nodeNames {
-		if err := lc.checkXChainAddress(name, lc.xchainPreFundedAddr); err != nil {
-			lc.errc <- err
-			return
-		}
-		if err := lc.checkPChainAddress(name, lc.pchainPreFundedAddr); err != nil {
-			lc.errc <- err
-			return
-		}
-	}
-	if err := lc.createAddresses(); err != nil {
-		lc.errc <- err
-		return
-	}
-	for name, addr := range lc.xchainAddrs {
+	for name, addr := range lc.xChainSecondaryAddrs {
 		if err := lc.checkXChainAddress(name, addr); err != nil {
 			lc.errc <- err
 			return
 		}
 	}
-	for name, addr := range lc.pchainAddrs {
+	for name, addr := range lc.pChainSecondaryAddrs {
 		if err := lc.checkPChainAddress(name, addr); err != nil {
 			lc.errc <- err
 			return
 		}
 	}
 
+	if err := lc.importEwoq(); err != nil {
+		lc.errc <- err
+		return
+	}
+	for _, name := range lc.nodeNames {
+		if err := lc.checkXChainAddress(name, lc.ewoqXChainAddr); err != nil {
+			lc.errc <- err
+			return
+		}
+		if err := lc.checkPChainAddress(name, lc.ewoqPChainAddr); err != nil {
+			lc.errc <- err
+			return
+		}
+	}
+	if err := lc.fetchEwoqBalances(); err != nil {
+		lc.errc <- err
+		return
+	}
+	if err := lc.createWallets(); err != nil {
+		lc.errc <- err
+		return
+	}
+	if err := lc.fetchWalletBalances(); err != nil {
+		lc.errc <- err
+		return
+	}
 	if err := lc.transferFunds(); err != nil {
 		lc.errc <- err
 		return
@@ -336,17 +351,33 @@ func (lc *localNetwork) waitForHealthy() error {
 func (lc *localNetwork) writeOutput() error {
 	pid := os.Getpid()
 	color.Blue("writing output %q with PID %d", lc.outputPath, pid)
+	wallets := make([]Wallet, len(lc.wallets))
+	for i := range wallets {
+		wallets[i] = Wallet{
+			Name:            lc.wallets[i].name,
+			PrivateKeyBytes: lc.wallets[i].spk.Bytes(),
+			Balance:         lc.wallets[i].balance,
+		}
+	}
 	ci := ClusterInfo{
-		URIs:                lc.getURIs(),
-		Endpoint:            fmt.Sprintf("/ext/bc/%s", lc.blkChainTxID),
-		PID:                 pid,
-		LogsDir:             lc.logsDir,
-		XChainPreFundedAddr: lc.xchainPreFundedAddr,
-		XChainAddrs:         lc.xchainAddrs,
-		PChainPreFundedAddr: lc.pchainPreFundedAddr,
-		PChainAddrs:         lc.pchainAddrs,
-		CChainPreFundedAddr: lc.cchainPreFundedAddr,
-		CChainAddrs:         lc.cchainAddrs,
+		URIs:     lc.getURIs(),
+		Endpoint: fmt.Sprintf("/ext/bc/%s", lc.blkChainTxID),
+		PID:      pid,
+		LogsDir:  lc.logsDir,
+
+		EwoqXChainAddress: lc.ewoqXChainAddr,
+		EwoqXChainBalance: lc.ewoqXChainBal,
+
+		EwoqPChainAddress: lc.ewoqPChainAddr,
+		EwoqPChainBalance: lc.ewoqPChainBal,
+
+		EwoqCChainAddress: lc.ewoqCChainAddr,
+		EwoqCChainBalance: lc.ewoqCChainBal,
+
+		XChainSecondaryAddresses: lc.xChainSecondaryAddrs,
+		PChainSecondaryAddresses: lc.pChainSecondaryAddrs,
+
+		Wallets: wallets,
 	}
 	err := ci.Save(lc.outputPath)
 	if err != nil {
