@@ -72,17 +72,11 @@ type localNetwork struct {
 	uris      map[string]string
 	apiClis   map[string]api.Client
 
-	ewoqXChainAddr string
-	ewoqXChainBal  uint64
-	ewoqPChainAddr string
-	ewoqPChainBal  uint64
-	ewoqCChainAddr string
-	ewoqCChainBal  uint64
-
 	xChainSecondaryAddrs map[string]string
 	pChainSecondaryAddrs map[string]string
 
-	wallets []*wallet
+	ewoqWallet *wallet
+	wallets    []*wallet
 
 	subnetTxID   ids.ID // tx ID for "create subnet"
 	blkChainTxID ids.ID // tx ID for "create blockchain"
@@ -230,16 +224,16 @@ func (lc *localNetwork) start() {
 		return
 	}
 	for _, name := range lc.nodeNames {
-		if err := lc.checkXChainAddress(name, lc.ewoqXChainAddr); err != nil {
+		if err := lc.checkXChainAddress(name, lc.ewoqWallet.xChainAddr); err != nil {
 			lc.errc <- err
 			return
 		}
-		if err := lc.checkPChainAddress(name, lc.ewoqPChainAddr); err != nil {
+		if err := lc.checkPChainAddress(name, lc.ewoqWallet.pChainAddr); err != nil {
 			lc.errc <- err
 			return
 		}
 	}
-	if err := lc.fetchEwoqBalances(); err != nil {
+	if err := lc.fetchBalanceEwoq(); err != nil {
 		lc.errc <- err
 		return
 	}
@@ -247,14 +241,23 @@ func (lc *localNetwork) start() {
 		lc.errc <- err
 		return
 	}
-	if err := lc.fetchWalletBalances(); err != nil {
+	if err := lc.fetchBalanceWallets(); err != nil {
 		lc.errc <- err
 		return
 	}
-	if err := lc.transferFunds(); err != nil {
+
+	if err := lc.withdrawEwoqXChain(lc.nodeNames[0]); err != nil {
 		lc.errc <- err
 		return
 	}
+	// if err := lc.withdrawEwoqPChain(); err != nil {
+	// 	lc.errc <- err
+	// 	return
+	// }
+	// if err := lc.withdrawEwoqCChain(); err != nil {
+	// 	lc.errc <- err
+	// 	return
+	// }
 
 	enableSubnet := lc.vmID != "" && lc.vmGenesisPath != ""
 	if enableSubnet {
@@ -356,7 +359,13 @@ func (lc *localNetwork) writeOutput() error {
 		wallets[i] = Wallet{
 			Name:            lc.wallets[i].name,
 			PrivateKeyBytes: lc.wallets[i].spk.Bytes(),
-			Balance:         lc.wallets[i].balance,
+			CommonAddress:   lc.wallets[i].commonAddr.String(),
+			XChainAddress:   lc.wallets[i].xChainAddr,
+			XChainBalance:   lc.wallets[i].xChainBal,
+			PChainAddress:   lc.wallets[i].pChainAddr,
+			PChainBalance:   lc.wallets[i].pChainBal,
+			CChainAddress:   lc.wallets[i].cChainAddr,
+			CChainBalance:   lc.wallets[i].cChainBal,
 		}
 	}
 	ci := ClusterInfo{
@@ -365,18 +374,20 @@ func (lc *localNetwork) writeOutput() error {
 		PID:      pid,
 		LogsDir:  lc.logsDir,
 
-		EwoqXChainAddress: lc.ewoqXChainAddr,
-		EwoqXChainBalance: lc.ewoqXChainBal,
-
-		EwoqPChainAddress: lc.ewoqPChainAddr,
-		EwoqPChainBalance: lc.ewoqPChainBal,
-
-		EwoqCChainAddress: lc.ewoqCChainAddr,
-		EwoqCChainBalance: lc.ewoqCChainBal,
-
 		XChainSecondaryAddresses: lc.xChainSecondaryAddrs,
 		PChainSecondaryAddresses: lc.pChainSecondaryAddrs,
 
+		EwoqWallet: Wallet{
+			Name:            lc.ewoqWallet.name,
+			PrivateKeyBytes: lc.ewoqWallet.spk.Bytes(),
+			CommonAddress:   lc.ewoqWallet.commonAddr.String(),
+			XChainAddress:   lc.ewoqWallet.xChainAddr,
+			XChainBalance:   lc.ewoqWallet.xChainBal,
+			PChainAddress:   lc.ewoqWallet.pChainAddr,
+			PChainBalance:   lc.ewoqWallet.pChainBal,
+			CChainAddress:   lc.ewoqWallet.cChainAddr,
+			CChainBalance:   lc.ewoqWallet.cChainBal,
+		},
 		Wallets: wallets,
 	}
 	err := ci.Save(lc.outputPath)

@@ -13,23 +13,24 @@ type ClusterInfo struct {
 	PID      int      `json:"pid"`
 	LogsDir  string   `json:"logsDir"`
 
-	EwoqXChainAddress string `json:"EwoqXChainAddress"`
-	EwoqXChainBalance uint64 `json:"EwoqXChainBalance"`
-	EwoqPChainAddress string `json:"EwoqPChainAddress"`
-	EwoqPChainBalance uint64 `json:"EwoqPChainBalance"`
-	EwoqCChainAddress string `json:"EwoqCChainAddress"`
-	EwoqCChainBalance uint64 `json:"EwoqCChainBalance"`
-
 	XChainSecondaryAddresses map[string]string `json:"xChainSecondaryAddresses"`
 	PChainSecondaryAddresses map[string]string `json:"pChainSecondaryAddresses"`
 
-	Wallets []Wallet `json:"wallets"`
+	EwoqWallet Wallet   `json:"ewoqWallet"`
+	Wallets    []Wallet `json:"wallets"`
 }
 
 type Wallet struct {
 	Name            string `json:"name"`
 	PrivateKeyBytes []byte `json:"privateKeyBytes"`
-	Balance         uint64 `json:"balance"`
+
+	CommonAddress string `json:"commonAddress"`
+	XChainAddress string `json:"xChainAddress"`
+	XChainBalance uint64 `json:"xChainBalance"`
+	PChainAddress string `json:"pChainAddress"`
+	PChainBalance uint64 `json:"pChainBalance"`
+	CChainAddress string `json:"cChainAddress"`
+	CChainBalance uint64 `json:"cChainBalance"`
 }
 
 const fsModeWrite = 0o600

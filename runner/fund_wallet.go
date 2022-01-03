@@ -27,7 +27,7 @@ const (
 	expectedCChainEwoqAddr = "0x8db97C7cEcE249c2b98bDC0226Cc4C2A57BF52FC"
 )
 
-var ewoqPrivateKey crypto.PrivateKey
+var ewoqPrivateKey *crypto.PrivateKeySECP256K1R
 
 func init() {
 	skBytes, err := formatting.Decode(formatting.CB58, rawEwoqPk)
@@ -35,15 +35,17 @@ func init() {
 		panic(err)
 	}
 	factory := &crypto.FactorySECP256K1R{}
-	ewoqPrivateKey, err = factory.ToPrivateKey(skBytes)
+	rpk, err := factory.ToPrivateKey(skBytes)
 	if err != nil {
 		panic(err)
 	}
+	ewoqPrivateKey = rpk.(*crypto.PrivateKeySECP256K1R)
 	color.Blue("loaded ewoq private key %q", ewoqPrivateKey.PublicKey().Address().Hex())
 }
 
 func (lc *localNetwork) importEwoq() error {
 	color.Blue("importing ewoq and funds to the user in all nodes...")
+	lc.ewoqWallet = newWallet("ewoq", ewoqPrivateKey)
 	for _, nodeName := range lc.nodeNames {
 		cli := lc.apiClis[nodeName]
 
@@ -51,9 +53,9 @@ func (lc *localNetwork) importEwoq() error {
 		if err != nil {
 			return fmt.Errorf("failed to import ewoq for X-chain: %w in %q", err, nodeName)
 		}
-		lc.ewoqXChainAddr = xAddr
-		if lc.ewoqXChainAddr != expectedXChainEwoqAddr {
-			return fmt.Errorf("unexpected X-chain funded address %q (expected %q)", lc.ewoqXChainAddr, expectedXChainEwoqAddr)
+		lc.ewoqWallet.xChainAddr = xAddr
+		if lc.ewoqWallet.xChainAddr != expectedXChainEwoqAddr {
+			return fmt.Errorf("unexpected X-chain funded address %q (expected %q)", lc.ewoqWallet.xChainAddr, expectedXChainEwoqAddr)
 		}
 		color.Cyan("imported ewoq to X-chain with address %q in %q", xAddr, nodeName)
 
@@ -61,9 +63,9 @@ func (lc *localNetwork) importEwoq() error {
 		if err != nil {
 			return fmt.Errorf("failed to import ewoq for P-chain: %w in %q", err, nodeName)
 		}
-		lc.ewoqPChainAddr = pAddr
-		if lc.ewoqPChainAddr != expectedPChainEwoqAddr {
-			return fmt.Errorf("unexpected P-chain funded address %q (expected %q)", lc.ewoqPChainAddr, expectedPChainEwoqAddr)
+		lc.ewoqWallet.pChainAddr = pAddr
+		if lc.ewoqWallet.pChainAddr != expectedPChainEwoqAddr {
+			return fmt.Errorf("unexpected P-chain funded address %q (expected %q)", lc.ewoqWallet.pChainAddr, expectedPChainEwoqAddr)
 		}
 		color.Cyan("imported ewoq to P-chain with address %q in %q", pAddr, nodeName)
 
@@ -71,114 +73,172 @@ func (lc *localNetwork) importEwoq() error {
 		if err != nil {
 			return fmt.Errorf("failed to import ewoq for P-chain: %w in %q", err, nodeName)
 		}
-		lc.ewoqCChainAddr = cAddr
-		if lc.ewoqCChainAddr != expectedCChainEwoqAddr {
-			return fmt.Errorf("unexpected C-chain funded address %q (expected %q)", lc.ewoqCChainAddr, expectedCChainEwoqAddr)
+		lc.ewoqWallet.cChainAddr = cAddr
+		if lc.ewoqWallet.cChainAddr != expectedCChainEwoqAddr {
+			return fmt.Errorf("unexpected C-chain funded address %q (expected %q)", lc.ewoqWallet.cChainAddr, expectedCChainEwoqAddr)
 		}
 		color.Cyan("imported ewoq to C-chain with address %q in %q", cAddr, nodeName)
 	}
 	return nil
 }
 
-func (lc *localNetwork) fetchEwoqBalances() error {
+func (lc *localNetwork) fetchBalanceEwoq() error {
 	color.Blue("importing ewoq and funds to the user in all nodes...")
 	for _, nodeName := range lc.nodeNames {
 		cli := lc.apiClis[nodeName]
 
-		xBalance, err := cli.XChainAPI().GetBalance(lc.ewoqXChainAddr, "AVAX", false)
+		xBalance, err := cli.XChainAPI().GetBalance(lc.ewoqWallet.xChainAddr, "AVAX", false)
 		if err != nil {
 			return fmt.Errorf("failed to get X-chain balance: %w in %q", err, nodeName)
 		}
-		lc.ewoqXChainBal = uint64(xBalance.Balance)
-		color.Cyan("ewoq X-chain balance $AVAX %d at address %q in %q", lc.ewoqXChainBal, lc.ewoqXChainAddr, nodeName)
+		lc.ewoqWallet.xChainBal = uint64(xBalance.Balance)
+		color.Cyan("ewoq X-chain balance $AVAX %d at address %q in %q", lc.ewoqWallet.xChainBal, lc.ewoqWallet.xChainAddr, nodeName)
 
-		pBalance, err := cli.PChainAPI().GetBalance(lc.ewoqPChainAddr)
+		pBalance, err := cli.PChainAPI().GetBalance(lc.ewoqWallet.pChainAddr)
 		if err != nil {
 			return fmt.Errorf("failed to get P-chain balance: %w in %q", err, nodeName)
 		}
-		lc.ewoqPChainBal = uint64(pBalance.Balance)
-		color.Cyan("ewoq P-chain balance $AVAX %d at address %q in %q", lc.ewoqPChainBal, lc.ewoqPChainAddr, nodeName)
+		lc.ewoqWallet.pChainBal = uint64(pBalance.Balance)
+		color.Cyan("ewoq P-chain balance $AVAX %d at address %q in %q", lc.ewoqWallet.pChainBal, lc.ewoqWallet.pChainAddr, nodeName)
 
 		// TODO: timeout
 		// failed to get tx status problem while making JSON RPC POST request to http://localhost:53859/ext/P: Post "http://localhost:53859/ext/P": context deadline exceeded
-		// cli.CChainEthAPI().BalanceAt(ctx, common.HexToAddress...
+		// cli.CChainEthAPI().BalanceAt(ctx, ...
 		ethCli, err := ethclient.Dial(fmt.Sprintf("%s/ext/bc/C/rpc", lc.uris[nodeName]))
 		if err != nil {
 			return fmt.Errorf("failed to dial %q (%w)", nodeName, err)
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		cBalance, err := ethCli.BalanceAt(ctx, common.HexToAddress(lc.ewoqCChainAddr), nil)
+		cBalance, err := ethCli.BalanceAt(ctx, lc.ewoqWallet.commonAddr, nil)
 		cancel()
 		if err != nil {
 			return fmt.Errorf("failed to get C-chain balance: %w in %q", err, nodeName)
 		}
-		lc.ewoqCChainBal = cBalance.Uint64()
-		color.Cyan("ewoq C-chain balance $AVAX %d at address %q in %q", lc.ewoqCChainBal, lc.ewoqCChainAddr, nodeName)
+		lc.ewoqWallet.cChainBal = cBalance.Uint64()
+		color.Cyan("ewoq C-chain balance $AVAX %d at address %q in %q", lc.ewoqWallet.cChainBal, lc.ewoqWallet.cChainAddr, nodeName)
 	}
 	return nil
 }
 
 func (lc *localNetwork) createWallets() error {
-	lc.wallets = []*wallet{
-		newWallet(randutil.String(10)),
-		newWallet(randutil.String(10)),
-		newWallet(randutil.String(10)),
-		newWallet(randutil.String(10)),
-		newWallet(randutil.String(10)),
+	lc.wallets = make([]*wallet, 5)
+	for i := range lc.wallets {
+		factory := &crypto.FactorySECP256K1R{}
+		rpk, err := factory.NewPrivateKey()
+		if err != nil {
+			return err
+		}
+		spk := rpk.(*crypto.PrivateKeySECP256K1R)
+		lc.wallets[i] = newWallet(randutil.String(10), spk)
 	}
 	return nil
 }
 
-func (lc *localNetwork) fetchWalletBalances() error {
+func (lc *localNetwork) fetchBalanceWallets() error {
 	for _, nodeName := range lc.nodeNames {
 		color.Blue("fetching wallet balances in %q", nodeName)
 		ethCli, err := ethclient.Dial(fmt.Sprintf("%s/ext/bc/C/rpc", lc.uris[nodeName]))
 		if err != nil {
 			return fmt.Errorf("failed to dial %q (%w)", nodeName, err)
 		}
-
 		for i, w := range lc.wallets {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			cBalance, err := ethCli.BalanceAt(ctx, w.addr, nil)
+			// or "common.HexToAddress(lc.ewoqWallet.cChainAddr)"
+			cBalance, err := ethCli.BalanceAt(ctx, w.commonAddr, nil)
 			cancel()
 			if err != nil {
 				return fmt.Errorf("failed to get C-chain balance: %w in %q", err, nodeName)
 			}
-			lc.wallets[i].balance = cBalance.Uint64()
-			color.Cyan("%q at %s balance: %d", w.name, w.addr, lc.wallets[i].balance)
+			lc.wallets[i].cChainBal = cBalance.Uint64()
+			color.Cyan("%q at %s balance: %d", w.name, w.commonAddr, lc.wallets[i].cChainBal)
 		}
 	}
 	return nil
 }
 
-func newWallet(name string) *wallet {
-	factory := &crypto.FactorySECP256K1R{}
-	rpk, err := factory.NewPrivateKey()
+type wallet struct {
+	name       string
+	spk        *crypto.PrivateKeySECP256K1R
+	commonAddr common.Address
+	xChainAddr string
+	xChainBal  uint64
+	pChainAddr string
+	pChainBal  uint64
+	cChainAddr string
+	cChainBal  uint64
+}
+
+func newWallet(name string, spk *crypto.PrivateKeySECP256K1R) *wallet {
+	pk := spk.ToECDSA()
+	commonAddr := ethcrypto.PubkeyToAddress(pk.PublicKey)
+
+	xAddr, err := formatting.FormatAddress("X", "custom", spk.PublicKey().Address().Bytes())
 	if err != nil {
 		panic(err)
 	}
-	spk := rpk.(*crypto.PrivateKeySECP256K1R)
-
-	pk := spk.ToECDSA()
-	addr := ethcrypto.PubkeyToAddress(pk.PublicKey)
+	pAddr, err := formatting.FormatAddress("P", "custom", spk.PublicKey().Address().Bytes())
+	if err != nil {
+		panic(err)
+	}
+	cAddr, err := formatting.FormatAddress("C", "custom", spk.PublicKey().Address().Bytes())
+	if err != nil {
+		panic(err)
+	}
 
 	return &wallet{
-		name:    name,
-		spk:     spk,
-		addr:    addr,
-		balance: 0,
+		name:       name,
+		spk:        spk,
+		commonAddr: commonAddr,
+		xChainAddr: xAddr,
+		xChainBal:  0,
+		pChainAddr: pAddr,
+		pChainBal:  0,
+		cChainAddr: cAddr,
+		cChainBal:  0,
 	}
 }
 
-type wallet struct {
-	name    string
-	spk     *crypto.PrivateKeySECP256K1R
-	addr    common.Address
-	balance uint64
+func (lc *localNetwork) withdrawEwoqXChain(nodeName string) error {
+	color.Blue("withdrawing X-chain funds from ewoq to a wallet in %q", nodeName)
+	cli, ok := lc.apiClis[nodeName]
+	if !ok {
+		return fmt.Errorf("%q API client not found", nodeName)
+	}
+	_ = cli
+
+	// create tx object
+
+	// sign with ewoq private key
+
+	// issue tx
+
+	// poll tx status until confirmed
+
+	// check balance of ewoq
+
+	// check balance of target wallet
+
+	return nil
 }
 
-func (lc *localNetwork) transferFunds() error {
-	color.Blue("transfering funds...")
+func (lc *localNetwork) withdrawEwoqPChain(nodeName string) error {
+	color.Blue("withdrawing P-chain funds from ewoq to a wallet in %q", nodeName)
+	cli, ok := lc.apiClis[nodeName]
+	if !ok {
+		return fmt.Errorf("%q API client not found", nodeName)
+	}
+	_ = cli
+
+	return nil
+}
+
+func (lc *localNetwork) withdrawEwoqCChain(nodeName string) error {
+	color.Blue("withdrawing C-chain funds from ewoq to a wallet in %q", nodeName)
+	cli, ok := lc.apiClis[nodeName]
+	if !ok {
+		return fmt.Errorf("%q API client not found", nodeName)
+	}
+	_ = cli
 
 	return nil
 }
