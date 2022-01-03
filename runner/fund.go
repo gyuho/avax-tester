@@ -241,6 +241,21 @@ func (lc *localNetwork) withdrawEwoqPChain(nodeName string) error {
 	if !ok {
 		return fmt.Errorf("%q API client not found", nodeName)
 	}
+	_ = cli
+
+	// cli.InfoAPI().
+	// // fetch current UTXOs of sender
+	// ubs, _, err := cli.PChainAPI().GetAtomicUTXOs(
+	// 	[]string{lc.ewoqWallet.pChainAddr}, // address
+	// 	"",
+	// 	100, // limit
+	// 	"",  // start address
+	// 	"",  // start utxo
+	// )
+	// if err != nil {
+	// 	return fmt.Errorf("failed to get X-Chain UTXOs %w in %q", err, nodeName)
+	// }
+	// _ = ubs
 
 	// create tx object
 
@@ -257,6 +272,8 @@ func (lc *localNetwork) withdrawEwoqPChain(nodeName string) error {
 	_ = cli
 	return nil
 }
+
+// TODO: import/export AVAX
 
 func (lc *localNetwork) withdrawEwoqCChain(nodeName string) error {
 	color.Blue("withdrawing C-Chain funds from ewoq %q to wallet %q in %q",
