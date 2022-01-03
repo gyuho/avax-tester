@@ -267,7 +267,7 @@ func (lc *localNetwork) start() {
 		lc.errc <- err
 		return
 	}
-	if err := lc.withdrawEwoqPChain(lc.nodeNames[1]); err != nil {
+	if err := lc.importXtoPChain(lc.nodeNames[1]); err != nil {
 		lc.errc <- err
 		return
 	}
@@ -285,7 +285,7 @@ func (lc *localNetwork) start() {
 	}
 
 	enableSubnet := lc.vmID != "" && lc.vmGenesisPath != ""
-	if enableSubnet {
+	if enableSubnet && false {
 		if err := lc.createSubnet(); err != nil {
 			lc.errc <- err
 			return

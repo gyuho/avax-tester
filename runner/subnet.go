@@ -20,7 +20,7 @@ const (
 	validatorEndDiff   = 30 * 24 * time.Hour // 30 days
 
 	// expected response from "CreateSubnet"
-	// based on hard-coded "userPass" and "pchainFundedAddr"
+	// based on hard-coded "userPass" and "pChainAddr"
 	expectedSubnetTxID = "24tZhrm8j8GCJRE9PomW8FaeqbgGS4UAQjJnqqn8pq5NwYSYV1"
 )
 

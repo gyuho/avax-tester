@@ -206,9 +206,11 @@ func (lc *localNetwork) fetchBalanceWallets() error {
 	return nil
 }
 
+// withdraw from ewoq X-Chain to a new wallet X-Chain
 func (lc *localNetwork) withdrawEwoqXChain(nodeName string) error {
-	color.Blue("withdrawing X-Chain funds from ewoq %q to wallet %q in %q",
+	color.Blue("withdrawing X-Chain funds from ewoq %q to %q %q in %q",
 		lc.ewoqWallet.xChainAddr,
+		lc.wallets[0].name,
 		lc.wallets[0].xChainAddr,
 		nodeName,
 	)
@@ -218,12 +220,12 @@ func (lc *localNetwork) withdrawEwoqXChain(nodeName string) error {
 	}
 	txID, err := cli.XChainWalletAPI().Send(
 		userPass,
-		[]string{lc.ewoqWallet.xChainAddr},
-		"",
-		10000,
-		"AVAX",
-		lc.wallets[0].xChainAddr,
-		"hi!",
+		[]string{lc.ewoqWallet.xChainAddr}, // from
+		"",                                 // changeAddr
+		100000,                             // amount
+		"AVAX",                             // asset
+		lc.wallets[0].xChainAddr,           // to
+		"hi!",                              // message
 	)
 	if err != nil {
 		return err
@@ -231,9 +233,11 @@ func (lc *localNetwork) withdrawEwoqXChain(nodeName string) error {
 	return lc.checkXChainTx(nodeName, txID)
 }
 
-func (lc *localNetwork) withdrawEwoqPChain(nodeName string) error {
-	color.Blue("withdrawing P-Chain funds from ewoq %q to wallet %q in %q",
-		lc.ewoqWallet.pChainAddr,
+// import from the funded new wallet X-Chain above to its P-Chain
+func (lc *localNetwork) importXtoPChain(nodeName string) error {
+	color.Blue("withdrawing funds from %q %q to %q in %q",
+		lc.wallets[0].name,
+		lc.wallets[0].xChainAddr,
 		lc.wallets[0].pChainAddr,
 		nodeName,
 	)
@@ -241,39 +245,52 @@ func (lc *localNetwork) withdrawEwoqPChain(nodeName string) error {
 	if !ok {
 		return fmt.Errorf("%q API client not found", nodeName)
 	}
-	_ = cli
 
-	// cli.InfoAPI().
-	// // fetch current UTXOs of sender
-	// ubs, _, err := cli.PChainAPI().GetAtomicUTXOs(
-	// 	[]string{lc.ewoqWallet.pChainAddr}, // address
-	// 	"",
-	// 	100, // limit
-	// 	"",  // start address
-	// 	"",  // start utxo
-	// )
-	// if err != nil {
-	// 	return fmt.Errorf("failed to get X-Chain UTXOs %w in %q", err, nodeName)
-	// }
-	// _ = ubs
+	// avm.getAssetDescription to get AVAX asset ID
+	avaxDesc, err := cli.XChainAPI().GetAssetDescription("AVAX")
+	if err != nil {
+		return fmt.Errorf("%q failed to get AVAX asset ID %w", nodeName, err)
+	}
+	// constants.PlatformChainID for P-Chain ID
+	xChainID, err := cli.InfoAPI().GetBlockchainID("X")
+	if err != nil {
+		return fmt.Errorf("%q failed to get blockchain ID %w", nodeName, err)
+	}
 
-	// create tx object
+	// "from" empty, only transfers from ewoq
+	// "from" with wallet[0] has "100000" and amount "50000"
+	// Error: "node2" failed to export AVAX asset want to spend 1050000 of asset BUuypiq2wyuLMvyhzFXcPyxPMCgSp7eeDohhQRqTChoBjKziC but only have 100000
 
-	// sign with ewoq private key
+	color.Blue("exporting X-Chain asset %q to %q", avaxDesc.AssetID, lc.wallets[0].pChainAddr)
+	txID, err := cli.XChainAPI().Export(
+		userPass,
+		[]string{lc.wallets[0].xChainAddr}, // from
+		"",                                 // changeAddr
+		50000,                              // amount
+		lc.wallets[0].pChainAddr,           // to
+		avaxDesc.AssetID.String(),          // assetID
+	)
+	if err != nil {
+		return fmt.Errorf("%q failed to export AVAX asset %w", nodeName, err)
+	}
+	if err := lc.checkXChainTx(nodeName, txID); err != nil {
+		return err
+	}
 
-	// issue tx
-
-	// poll tx status until confirmed
-
-	// check balance of ewoq
-
-	// check balance of target wallet
-
-	_ = cli
-	return nil
+	color.Blue("importing X-Chain asset %q to %q", avaxDesc.AssetID, lc.wallets[0].pChainAddr)
+	txID, err = cli.PChainAPI().ImportAVAX(
+		userPass,
+		// nil,                      // from
+		[]string{lc.wallets[0].xChainAddr}, // from
+		"",                                 // changeAddr
+		lc.wallets[0].pChainAddr,           // to
+		xChainID.String(),                  // sourceChain
+	)
+	if err != nil {
+		return err
+	}
+	return lc.checkPChainTx(nodeName, txID)
 }
-
-// TODO: import/export AVAX
 
 func (lc *localNetwork) withdrawEwoqCChain(nodeName string) error {
 	color.Blue("withdrawing C-Chain funds from ewoq %q to wallet %q in %q",
@@ -313,7 +330,7 @@ func (lc *localNetwork) checkXChainTx(nodeName string, txID ids.ID) error {
 			continue
 		}
 		if status != choices.Accepted {
-			color.Yellow("subnet tx %s status %q in %q", txID, status, nodeName)
+			color.Yellow("tx %s status %q in %q", txID, status, nodeName)
 			continue
 		}
 
@@ -346,7 +363,7 @@ func (lc *localNetwork) checkPChainTx(nodeName string, txID ids.ID) error {
 			continue
 		}
 		if status.Status != platformvm.Committed {
-			color.Yellow("subnet tx %s status %q in %q", txID, status.Status, nodeName)
+			color.Yellow("tx %s status %q in %q", txID, status.Status, nodeName)
 			continue
 		}
 
