@@ -31,10 +31,10 @@ func (lc *localNetwork) createSecondaryAddresses() error {
 	for _, nodeName := range lc.nodeNames {
 		cli := lc.apiClis[nodeName]
 
-		color.Blue("creating X-chain address")
+		color.Blue("creating X-Chain address")
 		xAddr, err := cli.XChainAPI().CreateAddress(userPass)
 		if err != nil {
-			return fmt.Errorf("failed to create X-chain address: %w in %q", err, nodeName)
+			return fmt.Errorf("failed to create X-Chain address: %w in %q", err, nodeName)
 		}
 		lc.xChainSecondaryAddrs[nodeName] = xAddr
 
@@ -45,12 +45,12 @@ func (lc *localNetwork) createSecondaryAddresses() error {
 		}
 		lc.pChainSecondaryAddrs[nodeName] = pAddr
 	}
-	color.Blue("created addresses: X-chain %q, P-chain %q", lc.xChainSecondaryAddrs, lc.pChainSecondaryAddrs)
+	color.Blue("created addresses: X-Chain %q, P-chain %q", lc.xChainSecondaryAddrs, lc.pChainSecondaryAddrs)
 	return nil
 }
 
 func (lc *localNetwork) checkXChainAddress(nodeName string, addr string) error {
-	color.Blue("checking X-chain address %q in %q", addr, nodeName)
+	color.Blue("checking X-Chain address %q in %q", addr, nodeName)
 	cli, ok := lc.apiClis[nodeName]
 	if !ok {
 		return fmt.Errorf("%q API client not found", nodeName)

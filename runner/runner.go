@@ -219,7 +219,7 @@ func (lc *localNetwork) start() {
 		}
 	}
 
-	if err := lc.importEwoq(); err != nil {
+	if err := lc.importEwoqWallet(); err != nil {
 		lc.errc <- err
 		return
 	}
@@ -237,9 +237,26 @@ func (lc *localNetwork) start() {
 		lc.errc <- err
 		return
 	}
-	if err := lc.createWallets(); err != nil {
+
+	if err := lc.createNewWallets(); err != nil {
 		lc.errc <- err
 		return
+	}
+	if err := lc.importNewWallets(); err != nil {
+		lc.errc <- err
+		return
+	}
+	for _, name := range lc.nodeNames {
+		for _, w := range lc.wallets {
+			if err := lc.checkXChainAddress(name, w.xChainAddr); err != nil {
+				lc.errc <- err
+				return
+			}
+			if err := lc.checkPChainAddress(name, w.pChainAddr); err != nil {
+				lc.errc <- err
+				return
+			}
+		}
 	}
 	if err := lc.fetchBalanceWallets(); err != nil {
 		lc.errc <- err
@@ -358,7 +375,8 @@ func (lc *localNetwork) writeOutput() error {
 	for i := range wallets {
 		wallets[i] = Wallet{
 			Name:            lc.wallets[i].name,
-			PrivateKeyBytes: lc.wallets[i].spk.Bytes(),
+			PrivateKey:      lc.wallets[i].privKeyEncoded,
+			PrivateKeyBytes: lc.wallets[i].privKey.Bytes(),
 			CommonAddress:   lc.wallets[i].commonAddr.String(),
 			XChainAddress:   lc.wallets[i].xChainAddr,
 			XChainBalance:   lc.wallets[i].xChainBal,
@@ -379,7 +397,8 @@ func (lc *localNetwork) writeOutput() error {
 
 		EwoqWallet: Wallet{
 			Name:            lc.ewoqWallet.name,
-			PrivateKeyBytes: lc.ewoqWallet.spk.Bytes(),
+			PrivateKey:      lc.ewoqWallet.privKeyEncoded,
+			PrivateKeyBytes: lc.ewoqWallet.privKey.Bytes(),
 			CommonAddress:   lc.ewoqWallet.commonAddr.String(),
 			XChainAddress:   lc.ewoqWallet.xChainAddr,
 			XChainBalance:   lc.ewoqWallet.xChainBal,

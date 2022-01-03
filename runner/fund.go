@@ -11,8 +11,6 @@ import (
 	"github.com/ava-labs/avalanchego/utils/formatting"
 	"github.com/ava-labs/avalanchego/vms/platformvm"
 	"github.com/ava-labs/coreth/ethclient"
-	"github.com/ethereum/go-ethereum/common"
-	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/fatih/color"
 	"github.com/gyuho/avax-tester/pkg/randutil"
 )
@@ -43,7 +41,21 @@ func init() {
 	color.Blue("loaded ewoq private key %q", ewoqPrivateKey.PublicKey().Address().Hex())
 }
 
-func (lc *localNetwork) importEwoq() error {
+func (lc *localNetwork) createNewWallets() error {
+	lc.wallets = make([]*wallet, 5)
+	for i := range lc.wallets {
+		factory := &crypto.FactorySECP256K1R{}
+		rpk, err := factory.NewPrivateKey()
+		if err != nil {
+			return err
+		}
+		spk := rpk.(*crypto.PrivateKeySECP256K1R)
+		lc.wallets[i] = newWallet(randutil.String(10), spk)
+	}
+	return nil
+}
+
+func (lc *localNetwork) importEwoqWallet() error {
 	color.Blue("importing ewoq and funds to the user in all nodes...")
 	lc.ewoqWallet = newWallet("ewoq", ewoqPrivateKey)
 	for _, nodeName := range lc.nodeNames {
@@ -51,13 +63,13 @@ func (lc *localNetwork) importEwoq() error {
 
 		xAddr, err := cli.XChainAPI().ImportKey(userPass, ewoqPk)
 		if err != nil {
-			return fmt.Errorf("failed to import ewoq for X-chain: %w in %q", err, nodeName)
+			return fmt.Errorf("failed to import ewoq for X-Chain: %w in %q", err, nodeName)
 		}
 		lc.ewoqWallet.xChainAddr = xAddr
 		if lc.ewoqWallet.xChainAddr != expectedXChainEwoqAddr {
-			return fmt.Errorf("unexpected X-chain funded address %q (expected %q)", lc.ewoqWallet.xChainAddr, expectedXChainEwoqAddr)
+			return fmt.Errorf("unexpected X-Chain funded address %q (expected %q)", lc.ewoqWallet.xChainAddr, expectedXChainEwoqAddr)
 		}
-		color.Cyan("imported ewoq to X-chain with address %q in %q", xAddr, nodeName)
+		color.Cyan("imported ewoq to X-Chain with address %q in %q", xAddr, nodeName)
 
 		pAddr, err := cli.PChainAPI().ImportKey(userPass, ewoqPk)
 		if err != nil {
@@ -82,6 +94,42 @@ func (lc *localNetwork) importEwoq() error {
 	return nil
 }
 
+func (lc *localNetwork) importNewWallets() error {
+	color.Blue("importing new wallets to the user in all nodes...")
+	for _, nodeName := range lc.nodeNames {
+		cli := lc.apiClis[nodeName]
+		for _, w := range lc.wallets {
+			xAddr, err := cli.XChainAPI().ImportKey(userPass, w.privKeyEncoded)
+			if err != nil {
+				return fmt.Errorf("failed to import wallet %q for X-Chain: %w in %q", w.name, err, nodeName)
+			}
+			if w.xChainAddr != xAddr {
+				return fmt.Errorf("unexpected X-Chain funded address %q (expected %q)", xAddr, w.xChainAddr)
+			}
+			color.Cyan("imported wallet %q to X-Chain with address %q in %q", w.name, xAddr, nodeName)
+
+			pAddr, err := cli.PChainAPI().ImportKey(userPass, w.privKeyEncoded)
+			if err != nil {
+				return fmt.Errorf("failed to import wallet %q for P-chain: %w in %q", w.name, err, nodeName)
+			}
+			if w.pChainAddr != pAddr {
+				return fmt.Errorf("unexpected P-chain funded address %q (expected %q)", pAddr, w.pChainAddr)
+			}
+			color.Cyan("imported wallet %q to P-chain with address %q in %q", w.name, pAddr, nodeName)
+
+			cAddr, err := cli.CChainAPI().ImportKey(userPass, w.privKeyEncoded)
+			if err != nil {
+				return fmt.Errorf("failed to import wallet %q for P-chain: %w in %q", w.name, err, nodeName)
+			}
+			if w.commonAddr.String() != cAddr {
+				return fmt.Errorf("unexpected C-chain funded address %q (expected %q)", cAddr, w.commonAddr)
+			}
+			color.Cyan("imported wallet %q to C-chain with address %q in %q", w.name, cAddr, nodeName)
+		}
+	}
+	return nil
+}
+
 func (lc *localNetwork) fetchBalanceEwoq() error {
 	color.Blue("importing ewoq and funds to the user in all nodes...")
 	for _, nodeName := range lc.nodeNames {
@@ -89,10 +137,10 @@ func (lc *localNetwork) fetchBalanceEwoq() error {
 
 		xBalance, err := cli.XChainAPI().GetBalance(lc.ewoqWallet.xChainAddr, "AVAX", false)
 		if err != nil {
-			return fmt.Errorf("failed to get X-chain balance: %w in %q", err, nodeName)
+			return fmt.Errorf("failed to get X-Chain balance: %w in %q", err, nodeName)
 		}
 		lc.ewoqWallet.xChainBal = uint64(xBalance.Balance)
-		color.Cyan("ewoq X-chain balance $AVAX %d at address %q in %q", lc.ewoqWallet.xChainBal, lc.ewoqWallet.xChainAddr, nodeName)
+		color.Cyan("ewoq X-Chain balance $AVAX %d at address %q in %q", lc.ewoqWallet.xChainBal, lc.ewoqWallet.xChainAddr, nodeName)
 
 		pBalance, err := cli.PChainAPI().GetBalance(lc.ewoqWallet.pChainAddr)
 		if err != nil {
@@ -120,28 +168,30 @@ func (lc *localNetwork) fetchBalanceEwoq() error {
 	return nil
 }
 
-func (lc *localNetwork) createWallets() error {
-	lc.wallets = make([]*wallet, 5)
-	for i := range lc.wallets {
-		factory := &crypto.FactorySECP256K1R{}
-		rpk, err := factory.NewPrivateKey()
-		if err != nil {
-			return err
-		}
-		spk := rpk.(*crypto.PrivateKeySECP256K1R)
-		lc.wallets[i] = newWallet(randutil.String(10), spk)
-	}
-	return nil
-}
-
 func (lc *localNetwork) fetchBalanceWallets() error {
 	for _, nodeName := range lc.nodeNames {
+		cli := lc.apiClis[nodeName]
+
 		color.Blue("fetching wallet balances in %q", nodeName)
 		ethCli, err := ethclient.Dial(fmt.Sprintf("%s/ext/bc/C/rpc", lc.uris[nodeName]))
 		if err != nil {
 			return fmt.Errorf("failed to dial %q (%w)", nodeName, err)
 		}
-		for i, w := range lc.wallets {
+		for _, w := range lc.wallets {
+			xBalance, err := cli.XChainAPI().GetBalance(w.xChainAddr, "AVAX", false)
+			if err != nil {
+				return fmt.Errorf("failed to get X-Chain balance: %w in %q", err, nodeName)
+			}
+			w.xChainBal = uint64(xBalance.Balance)
+			color.Cyan("%q X-Chain balance $AVAX %d at address %q in %q", w.name, w.xChainBal, w.xChainAddr, nodeName)
+
+			pBalance, err := cli.PChainAPI().GetBalance(w.pChainAddr)
+			if err != nil {
+				return fmt.Errorf("failed to get P-chain balance: %w in %q", err, nodeName)
+			}
+			w.pChainBal = uint64(pBalance.Balance)
+			color.Cyan("%q P-chain balance $AVAX %d at address %q in %q", w.name, w.pChainBal, w.pChainAddr, nodeName)
+
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			// or "common.HexToAddress(lc.ewoqWallet.cChainAddr)"
 			cBalance, err := ethCli.BalanceAt(ctx, w.commonAddr, nil)
@@ -149,57 +199,15 @@ func (lc *localNetwork) fetchBalanceWallets() error {
 			if err != nil {
 				return fmt.Errorf("failed to get C-chain balance: %w in %q", err, nodeName)
 			}
-			lc.wallets[i].cChainBal = cBalance.Uint64()
-			color.Cyan("%q at %s balance: %d", w.name, w.commonAddr, lc.wallets[i].cChainBal)
+			w.cChainBal = cBalance.Uint64()
+			color.Cyan("%q C-chain balance $AVAX %d at address %q in %q", w.name, w.cChainBal, w.cChainAddr, nodeName)
 		}
 	}
 	return nil
 }
 
-type wallet struct {
-	name       string
-	spk        *crypto.PrivateKeySECP256K1R
-	commonAddr common.Address
-	xChainAddr string
-	xChainBal  uint64
-	pChainAddr string
-	pChainBal  uint64
-	cChainAddr string
-	cChainBal  uint64
-}
-
-func newWallet(name string, spk *crypto.PrivateKeySECP256K1R) *wallet {
-	pk := spk.ToECDSA()
-	commonAddr := ethcrypto.PubkeyToAddress(pk.PublicKey)
-
-	xAddr, err := formatting.FormatAddress("X", "custom", spk.PublicKey().Address().Bytes())
-	if err != nil {
-		panic(err)
-	}
-	pAddr, err := formatting.FormatAddress("P", "custom", spk.PublicKey().Address().Bytes())
-	if err != nil {
-		panic(err)
-	}
-	cAddr, err := formatting.FormatAddress("C", "custom", spk.PublicKey().Address().Bytes())
-	if err != nil {
-		panic(err)
-	}
-
-	return &wallet{
-		name:       name,
-		spk:        spk,
-		commonAddr: commonAddr,
-		xChainAddr: xAddr,
-		xChainBal:  0,
-		pChainAddr: pAddr,
-		pChainBal:  0,
-		cChainAddr: cAddr,
-		cChainBal:  0,
-	}
-}
-
 func (lc *localNetwork) withdrawEwoqXChain(nodeName string) error {
-	color.Blue("withdrawing X-chain funds from ewoq to a wallet in %q", nodeName)
+	color.Blue("withdrawing X-Chain funds from ewoq to a wallet in %q", nodeName)
 	cli, ok := lc.apiClis[nodeName]
 	if !ok {
 		return fmt.Errorf("%q API client not found", nodeName)
@@ -244,7 +252,7 @@ func (lc *localNetwork) withdrawEwoqCChain(nodeName string) error {
 }
 
 func (lc *localNetwork) checkXChainTx(nodeName string, txID ids.ID) error {
-	color.Blue("checking X-chain tx %q in %q", txID, nodeName)
+	color.Blue("checking X-Chain tx %q in %q", txID, nodeName)
 	cli, ok := lc.apiClis[nodeName]
 	if !ok {
 		return fmt.Errorf("%q API client not found", nodeName)

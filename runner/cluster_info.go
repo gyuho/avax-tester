@@ -22,6 +22,7 @@ type ClusterInfo struct {
 
 type Wallet struct {
 	Name            string `json:"name"`
+	PrivateKey      string `json:"privateKey"`
 	PrivateKeyBytes []byte `json:"privateKeyBytes"`
 
 	CommonAddress string `json:"commonAddress"`

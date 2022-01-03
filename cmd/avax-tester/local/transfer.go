@@ -210,7 +210,7 @@ step 3. get the list of addresses for the pre-funded key
 		fmt.Fprintf(os.Stderr, "unexpected pChainAddress %v, expected %q\n", pChainAddress[0], xChainAddress)
 		panic(1)
 	}
-	fmt.Printf(colorize(logColor, "[light_green]X-chain address [default]%q\n"), xChainAddress)
+	fmt.Printf(colorize(logColor, "[light_green]X-Chain address [default]%q\n"), xChainAddress)
 	fmt.Printf(colorize(logColor, "[light_green]P-chain address [default]%q\n"), pChainAddress)
 	fmt.Printf(colorize(logColor, "[light_green]C-chain address [default]%q\n"), cChainAddress)
 
@@ -272,7 +272,7 @@ step 4. get the balance of the pre-funded wallet
 		)
 		panic(1)
 	}
-	fmt.Printf(colorize(logColor, "[light_green]X-chain balance [default]%q\n"), xChainBalance)
+	fmt.Printf(colorize(logColor, "[light_green]X-Chain balance [default]%q\n"), xChainBalance)
 	fmt.Printf(colorize(logColor, "[light_green]P-chain balance [default]%q\n"), pChainBalance)
 
 	//
@@ -282,7 +282,7 @@ step 4. get the balance of the pre-funded wallet
 	//
 	fmt.Println(colorize(logColor, `
 [yellow]-----
-step 5. create another address in the X-chain for transfer
+step 5. create another address in the X-Chain for transfer
 [default]`))
 	xChainTransferee := ""
 	for i, host := range apiHosts {
@@ -329,8 +329,8 @@ step 5. create another address in the X-chain for transfer
 		xChainTransferee = fmt.Sprint(rm["address"])
 		break
 	}
-	fmt.Printf(colorize(logColor, "[light_green]X-chain transferrer [default]%q\n"), xChainAddress)
-	fmt.Printf(colorize(logColor, "[light_green]X-chain transferee [default]%q\n"), xChainTransferee)
+	fmt.Printf(colorize(logColor, "[light_green]X-Chain transferrer [default]%q\n"), xChainAddress)
+	fmt.Printf(colorize(logColor, "[light_green]X-Chain transferee [default]%q\n"), xChainTransferee)
 
 	//
 	//
@@ -341,7 +341,7 @@ step 5. create another address in the X-chain for transfer
 [yellow]-----
 step 6. check the balance and transfer from one to another
 [default]`))
-	// check all X-chains
+	// check all X-Chains
 	for _, host := range apiHosts {
 		rr, err = jsonrpc.NewClient(fmt.Sprintf("%s/ext/bc/X", host)).Call("avm.getBalance", struct {
 			Address string `json:"address"`
@@ -393,7 +393,7 @@ step 6. check the balance and transfer from one to another
 		panic(1)
 	}
 	txID := fmt.Sprint(rm["txID"])
-	fmt.Printf(colorize(logColor, "[light_green]X-chain transaction [default]%q\n"), txID)
+	fmt.Printf(colorize(logColor, "[light_green]X-Chain transaction [default]%q\n"), txID)
 
 	//
 	//
@@ -445,7 +445,7 @@ step 7. check the status of the transaction
 	}
 	fmt.Printf(colorize(logColor, "[light_blue]transaction confirmed [default]%q (took %v)\n"), txID, firstTook)
 
-	// check all X-chains
+	// check all X-Chains
 	for _, host := range apiHosts {
 		rr, err = jsonrpc.NewClient(fmt.Sprintf("%s/ext/bc/X", host)).Call("avm.getBalance", struct {
 			Address string `json:"address"`
