@@ -267,14 +267,22 @@ func (lc *localNetwork) start() {
 		lc.errc <- err
 		return
 	}
-	// if err := lc.withdrawEwoqPChain(); err != nil {
-	// 	lc.errc <- err
-	// 	return
-	// }
-	// if err := lc.withdrawEwoqCChain(); err != nil {
-	// 	lc.errc <- err
-	// 	return
-	// }
+	if err := lc.withdrawEwoqPChain(lc.nodeNames[1]); err != nil {
+		lc.errc <- err
+		return
+	}
+	if err := lc.withdrawEwoqCChain(lc.nodeNames[2]); err != nil {
+		lc.errc <- err
+		return
+	}
+	if err := lc.fetchBalanceEwoq(); err != nil {
+		lc.errc <- err
+		return
+	}
+	if err := lc.fetchBalanceWallets(); err != nil {
+		lc.errc <- err
+		return
+	}
 
 	enableSubnet := lc.vmID != "" && lc.vmGenesisPath != ""
 	if enableSubnet {

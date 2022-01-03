@@ -207,12 +207,40 @@ func (lc *localNetwork) fetchBalanceWallets() error {
 }
 
 func (lc *localNetwork) withdrawEwoqXChain(nodeName string) error {
-	color.Blue("withdrawing X-Chain funds from ewoq to a wallet in %q", nodeName)
+	color.Blue("withdrawing X-Chain funds from ewoq %q to wallet %q in %q",
+		lc.ewoqWallet.xChainAddr,
+		lc.wallets[0].xChainAddr,
+		nodeName,
+	)
 	cli, ok := lc.apiClis[nodeName]
 	if !ok {
 		return fmt.Errorf("%q API client not found", nodeName)
 	}
-	_ = cli
+	txID, err := cli.XChainWalletAPI().Send(
+		userPass,
+		[]string{lc.ewoqWallet.xChainAddr},
+		"",
+		10000,
+		"AVAX",
+		lc.wallets[0].xChainAddr,
+		"hi!",
+	)
+	if err != nil {
+		return err
+	}
+	return lc.checkXChainTx(nodeName, txID)
+}
+
+func (lc *localNetwork) withdrawEwoqPChain(nodeName string) error {
+	color.Blue("withdrawing P-Chain funds from ewoq %q to wallet %q in %q",
+		lc.ewoqWallet.pChainAddr,
+		lc.wallets[0].pChainAddr,
+		nodeName,
+	)
+	cli, ok := lc.apiClis[nodeName]
+	if !ok {
+		return fmt.Errorf("%q API client not found", nodeName)
+	}
 
 	// create tx object
 
@@ -226,22 +254,16 @@ func (lc *localNetwork) withdrawEwoqXChain(nodeName string) error {
 
 	// check balance of target wallet
 
-	return nil
-}
-
-func (lc *localNetwork) withdrawEwoqPChain(nodeName string) error {
-	color.Blue("withdrawing P-chain funds from ewoq to a wallet in %q", nodeName)
-	cli, ok := lc.apiClis[nodeName]
-	if !ok {
-		return fmt.Errorf("%q API client not found", nodeName)
-	}
 	_ = cli
-
 	return nil
 }
 
 func (lc *localNetwork) withdrawEwoqCChain(nodeName string) error {
-	color.Blue("withdrawing C-chain funds from ewoq to a wallet in %q", nodeName)
+	color.Blue("withdrawing C-Chain funds from ewoq %q to wallet %q in %q",
+		lc.ewoqWallet.cChainAddr,
+		lc.wallets[0].cChainAddr,
+		nodeName,
+	)
 	cli, ok := lc.apiClis[nodeName]
 	if !ok {
 		return fmt.Errorf("%q API client not found", nodeName)
