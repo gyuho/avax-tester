@@ -72,6 +72,11 @@ type localNetwork struct {
 	uris      map[string]string
 	apiClis   map[string]api.Client
 
+	avaxAssetID ids.ID
+	xChainID    ids.ID
+	pChainID    ids.ID
+	cChainID    ids.ID
+
 	xChainSecondaryAddrs map[string]string
 	pChainSecondaryAddrs map[string]string
 
@@ -169,6 +174,12 @@ func newLocalNetwork(
 		uris:      make(map[string]string),
 		apiClis:   make(map[string]api.Client),
 
+		// to be fetched later
+		avaxAssetID: ids.Empty,
+		xChainID:    ids.Empty,
+		pChainID:    avago_constants.PlatformChainID,
+		cChainID:    ids.Empty,
+
 		xChainSecondaryAddrs: make(map[string]string),
 		pChainSecondaryAddrs: make(map[string]string),
 
@@ -263,11 +274,19 @@ func (lc *localNetwork) start() {
 		return
 	}
 
-	if err := lc.withdrawEwoqXChain(lc.nodeNames[0]); err != nil {
+	if err := lc.withdrawEwoqXChainToWallet(
+		lc.nodeNames[0],
+		lc.wallets[0],
+		100000,
+	); err != nil {
 		lc.errc <- err
 		return
 	}
-	if err := lc.importXtoPChain(lc.nodeNames[1]); err != nil {
+	if err := lc.exportXtoPChain(
+		lc.nodeNames[0],
+		lc.wallets[0],
+		50000,
+	); err != nil {
 		lc.errc <- err
 		return
 	}
@@ -366,8 +385,31 @@ func (lc *localNetwork) waitForHealthy() error {
 		uri := fmt.Sprintf("http://%s:%d", node.GetURL(), node.GetAPIPort())
 		lc.uris[nodeName] = uri
 
-		lc.apiClis[nodeName] = node.GetAPIClient()
+		cli := node.GetAPIClient()
+		lc.apiClis[nodeName] = cli
 		color.Cyan("%s: node ID %q, URI %q", nodeName, nodeID, uri)
+
+		if lc.avaxAssetID == ids.Empty {
+			avaxDesc, err := cli.XChainAPI().GetAssetDescription("AVAX")
+			if err != nil {
+				return fmt.Errorf("%q failed to get AVAX asset ID %w", nodeName, err)
+			}
+			lc.avaxAssetID = avaxDesc.AssetID
+		}
+		if lc.xChainID == ids.Empty {
+			xChainID, err := cli.InfoAPI().GetBlockchainID("X")
+			if err != nil {
+				return fmt.Errorf("%q failed to get blockchain ID %w", nodeName, err)
+			}
+			lc.xChainID = xChainID
+		}
+		if lc.cChainID == ids.Empty {
+			cChainID, err := cli.InfoAPI().GetBlockchainID("C")
+			if err != nil {
+				return fmt.Errorf("%q failed to get blockchain ID %w", nodeName, err)
+			}
+			lc.cChainID = cChainID
+		}
 	}
 
 	lc.readycCloseOnce.Do(func() {

@@ -7,9 +7,14 @@ import (
 
 	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/snow/choices"
+	"github.com/ava-labs/avalanchego/utils/constants"
 	"github.com/ava-labs/avalanchego/utils/crypto"
 	"github.com/ava-labs/avalanchego/utils/formatting"
+	"github.com/ava-labs/avalanchego/utils/units"
+	"github.com/ava-labs/avalanchego/vms/avm"
+	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/platformvm"
+	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
 	"github.com/ava-labs/coreth/ethclient"
 	"github.com/fatih/color"
 	"github.com/gyuho/avax-tester/pkg/randutil"
@@ -207,11 +212,11 @@ func (lc *localNetwork) fetchBalanceWallets() error {
 }
 
 // withdraw from ewoq X-Chain to a new wallet X-Chain
-func (lc *localNetwork) withdrawEwoqXChain(nodeName string) error {
+func (lc *localNetwork) withdrawEwoqXChainToWallet(nodeName string, to *wallet, amount uint64) error {
 	color.Blue("withdrawing X-Chain funds from ewoq %q to %q %q in %q",
 		lc.ewoqWallet.xChainAddr,
-		lc.wallets[0].name,
-		lc.wallets[0].xChainAddr,
+		to.name,
+		to.xChainAddr,
 		nodeName,
 	)
 	cli, ok := lc.apiClis[nodeName]
@@ -222,9 +227,9 @@ func (lc *localNetwork) withdrawEwoqXChain(nodeName string) error {
 		userPass,
 		[]string{lc.ewoqWallet.xChainAddr}, // from
 		"",                                 // changeAddr
-		100000,                             // amount
+		amount,                             // amount
 		"AVAX",                             // asset
-		lc.wallets[0].xChainAddr,           // to
+		to.xChainAddr,                      // to
 		"hi!",                              // message
 	)
 	if err != nil {
@@ -234,11 +239,14 @@ func (lc *localNetwork) withdrawEwoqXChain(nodeName string) error {
 }
 
 // import from the funded new wallet X-Chain above to its P-Chain
-func (lc *localNetwork) importXtoPChain(nodeName string) error {
+func (lc *localNetwork) exportXtoPChain(
+	nodeName string,
+	from *wallet,
+	amount uint64) error {
 	color.Blue("withdrawing funds from %q %q to %q in %q",
-		lc.wallets[0].name,
-		lc.wallets[0].xChainAddr,
-		lc.wallets[0].pChainAddr,
+		from.name,
+		from.xChainAddr,
+		from.pChainAddr,
 		nodeName,
 	)
 	cli, ok := lc.apiClis[nodeName]
@@ -246,48 +254,172 @@ func (lc *localNetwork) importXtoPChain(nodeName string) error {
 		return fmt.Errorf("%q API client not found", nodeName)
 	}
 
-	// avm.getAssetDescription to get AVAX asset ID
-	avaxDesc, err := cli.XChainAPI().GetAssetDescription("AVAX")
-	if err != nil {
-		return fmt.Errorf("%q failed to get AVAX asset ID %w", nodeName, err)
-	}
-	// constants.PlatformChainID for P-Chain ID
-	xChainID, err := cli.InfoAPI().GetBlockchainID("X")
-	if err != nil {
-		return fmt.Errorf("%q failed to get blockchain ID %w", nodeName, err)
-	}
-
-	// "from" empty, only transfers from ewoq
-	// "from" with wallet[0] has "100000" and amount "50000"
-	// Error: "node2" failed to export AVAX asset want to spend 1050000 of asset BUuypiq2wyuLMvyhzFXcPyxPMCgSp7eeDohhQRqTChoBjKziC but only have 100000
-
-	color.Blue("exporting X-Chain asset %q to %q", avaxDesc.AssetID, lc.wallets[0].pChainAddr)
-	txID, err := cli.XChainAPI().Export(
-		userPass,
-		[]string{lc.wallets[0].xChainAddr}, // from
-		"",                                 // changeAddr
-		50000,                              // amount
-		lc.wallets[0].pChainAddr,           // to
-		avaxDesc.AssetID.String(),          // assetID
+	color.Cyan("get all UTXOs from X-Chain %q", from.xChainAddr)
+	ubs, _, err := cli.XChainAPI().GetUTXOs(
+		[]string{from.xChainAddr},
+		100,
+		"",
+		"",
 	)
 	if err != nil {
-		return fmt.Errorf("%q failed to export AVAX asset %w", nodeName, err)
+		return fmt.Errorf("%q failed to query UTXOs %w", nodeName, err)
+	}
+
+	color.Blue("exporting X-Chain asset %q from %q to %q",
+		lc.avaxAssetID,
+		from.xChainAddr,
+		from.pChainAddr,
+	)
+	totalOut := uint64(0)
+	ins := make([]*avax.TransferableInput, 0)
+	signers := make([][]*crypto.PrivateKeySECP256K1R, 0)
+	for _, ub := range ubs {
+		utxo := new(avax.UTXO)
+		if _, err := xCodecManager.Unmarshal(ub, utxo); err != nil {
+			return fmt.Errorf("failed to unmarshal utxo bytes: %w", err)
+		}
+		if utxo.AssetID() != lc.avaxAssetID {
+			continue
+		}
+		inputf, inputSigners, err := from.keyChain.Spend(utxo.Out, 0)
+		if err != nil {
+			color.Cyan("this utxo cannot be spend with current keys %v; skipping", err)
+			continue
+		}
+		input, ok := inputf.(avax.TransferableIn)
+		if !ok {
+			color.Cyan("this utxo unexpected type %T; skipping", inputf)
+			continue
+		}
+		totalOut += input.Amount()
+		ins = append(ins, &avax.TransferableInput{
+			UTXOID: utxo.UTXOID,
+			Asset:  avax.Asset{ID: lc.avaxAssetID},
+			In:     input,
+		})
+		signers = append(signers, inputSigners)
+		if totalOut > amount+units.MilliAvax {
+			break
+		}
+	}
+	avax.SortTransferableInputsWithSigners(ins, signers)
+
+	outs := []*avax.TransferableOutput{}
+	if totalOut-amount-units.MilliAvax > 0 {
+		outs = append(outs, &avax.TransferableOutput{
+			Asset: avax.Asset{ID: lc.avaxAssetID},
+			Out: &secp256k1fx.TransferOutput{
+				Amt: totalOut - units.MilliAvax - amount,
+				OutputOwners: secp256k1fx.OutputOwners{
+					Locktime:  0,
+					Threshold: 1,
+					Addrs:     []ids.ShortID{ids.ShortID(from.commonAddr)},
+				},
+			},
+		})
+	}
+	xTx := avm.Tx{UnsignedTx: &avm.ExportTx{
+		BaseTx: avm.BaseTx{BaseTx: avax.BaseTx{
+			NetworkID:    constants.LocalID,
+			BlockchainID: lc.xChainID,
+			Ins:          ins,
+			Outs:         outs,
+		}},
+		DestinationChain: lc.pChainID,
+		ExportedOuts: []*avax.TransferableOutput{{
+			Asset: avax.Asset{ID: lc.avaxAssetID},
+			Out: &secp256k1fx.TransferOutput{
+				Amt: amount,
+				OutputOwners: secp256k1fx.OutputOwners{
+					Locktime:  0,
+					Threshold: 1,
+					Addrs:     []ids.ShortID{ids.ShortID(from.commonAddr)},
+				},
+			},
+		}},
+	}}
+	if err := xTx.SignSECP256K1Fx(xCodecManager, signers); err != nil {
+		return fmt.Errorf("unable to sign X-Chain export tx: %w", err)
+	}
+	txID, err := cli.XChainAPI().IssueTx(xTx.Bytes())
+	if err != nil {
+		return fmt.Errorf("failed to issue tx: %w", err)
 	}
 	if err := lc.checkXChainTx(nodeName, txID); err != nil {
 		return err
 	}
 
-	color.Blue("importing X-Chain asset %q to %q", avaxDesc.AssetID, lc.wallets[0].pChainAddr)
-	txID, err = cli.PChainAPI().ImportAVAX(
-		userPass,
-		// nil,                      // from
-		[]string{lc.wallets[0].xChainAddr}, // from
-		"",                                 // changeAddr
-		lc.wallets[0].pChainAddr,           // to
-		xChainID.String(),                  // sourceChain
+	color.Blue("importing X-Chain asset %q from %q to %q",
+		lc.avaxAssetID,
+		from.xChainAddr,
+		from.pChainAddr,
+	)
+	ubs, _, err = cli.PChainAPI().GetAtomicUTXOs(
+		[]string{from.pChainAddr},
+		lc.xChainID.String(),
+		100,
+		"",
+		"",
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("%q failed to query UTXOs %w", nodeName, err)
+	}
+	totalOut = uint64(0)
+	ins = make([]*avax.TransferableInput, 0)
+	signers = make([][]*crypto.PrivateKeySECP256K1R, 0)
+	for _, ub := range ubs {
+		utxo := new(avax.UTXO)
+		if _, err := pCodecManager.Unmarshal(ub, utxo); err != nil {
+			return fmt.Errorf("failed to unmarshal utxo bytes: %w", err)
+		}
+		if utxo.AssetID() != lc.avaxAssetID {
+			continue
+		}
+		inputf, inputSigners, err := from.keyChain.Spend(utxo.Out, 0)
+		if err != nil {
+			color.Cyan("this utxo cannot be spend with current keys %v; skipping", err)
+			continue
+		}
+		input, ok := inputf.(avax.TransferableIn)
+		if !ok {
+			color.Cyan("this utxo unexpected type %T; skipping", inputf)
+			continue
+		}
+		totalOut += input.Amount()
+		ins = append(ins, &avax.TransferableInput{
+			UTXOID: utxo.UTXOID,
+			Asset:  avax.Asset{ID: lc.avaxAssetID},
+			In:     input,
+		})
+		signers = append(signers, inputSigners)
+	}
+	avax.SortTransferableInputsWithSigners(ins, signers)
+
+	pTx := platformvm.Tx{UnsignedTx: &platformvm.UnsignedImportTx{
+		BaseTx: platformvm.BaseTx{BaseTx: avax.BaseTx{
+			NetworkID:    constants.LocalID,
+			BlockchainID: lc.pChainID,
+			Outs: []*avax.TransferableOutput{{
+				Asset: avax.Asset{ID: lc.avaxAssetID},
+				Out: &secp256k1fx.TransferOutput{
+					Amt: totalOut - units.MilliAvax,
+					OutputOwners: secp256k1fx.OutputOwners{
+						Locktime:  0,
+						Threshold: 1,
+						Addrs:     []ids.ShortID{ids.ShortID(from.commonAddr)},
+					},
+				},
+			}},
+		}},
+		SourceChain:    lc.xChainID,
+		ImportedInputs: ins,
+	}}
+	if err := pTx.Sign(xCodecManager, signers); err != nil {
+		return fmt.Errorf("unable to sign P-Chain import tx: %w", err)
+	}
+	txID, err = cli.PChainAPI().IssueTx(pTx.Bytes())
+	if err != nil {
+		return fmt.Errorf("failed to issue tx: %w", err)
 	}
 	return lc.checkPChainTx(nodeName, txID)
 }
