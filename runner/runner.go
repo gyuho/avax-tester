@@ -282,18 +282,19 @@ func (lc *localNetwork) start() {
 		lc.errc <- err
 		return
 	}
-	if err := lc.exportXtoPChain(
-		lc.nodeNames[0],
-		lc.wallets[0],
-		50000,
-	); err != nil {
-		lc.errc <- err
-		return
-	}
-	if err := lc.withdrawEwoqCChain(lc.nodeNames[2]); err != nil {
-		lc.errc <- err
-		return
-	}
+
+	// if err := lc.exportXtoPChain(
+	// 	lc.nodeNames[0],
+	// 	lc.wallets[0],
+	// 	50000,
+	// ); err != nil {
+	// 	lc.errc <- err
+	// 	return
+	// }
+	// if err := lc.withdrawEwoqCChain(lc.nodeNames[2]); err != nil {
+	// 	lc.errc <- err
+	// 	return
+	// }
 	if err := lc.fetchBalanceEwoq(); err != nil {
 		lc.errc <- err
 		return
