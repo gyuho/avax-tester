@@ -1,6 +1,9 @@
 package runner
 
 import (
+	"fmt"
+
+	"github.com/ava-labs/avalanchego/ids"
 	"github.com/ava-labs/avalanchego/utils/crypto"
 	"github.com/ava-labs/avalanchego/utils/formatting"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
@@ -14,6 +17,7 @@ type wallet struct {
 	privKeyEncoded string
 	keyChain       *secp256k1fx.Keychain
 	commonAddr     common.Address
+	shortAddr      ids.ShortID
 	xChainAddr     string
 	xChainBal      uint64
 	pChainAddr     string
@@ -32,7 +36,10 @@ func newWallet(name string, privKey *crypto.PrivateKeySECP256K1R) *wallet {
 
 	keyChain := secp256k1fx.NewKeychain()
 	keyChain.Add(privKey)
+
 	commonAddr := ethcrypto.PubkeyToAddress(privKey.ToECDSA().PublicKey)
+	shortAddr := privKey.PublicKey().Address()
+	fmt.Println("common", commonAddr, shortAddr)
 
 	xAddr, err := formatting.FormatAddress("X", "custom", privKey.PublicKey().Address().Bytes())
 	if err != nil {
@@ -53,6 +60,7 @@ func newWallet(name string, privKey *crypto.PrivateKeySECP256K1R) *wallet {
 		privKeyEncoded: privKeyEncoded,
 		keyChain:       keyChain,
 		commonAddr:     commonAddr,
+		shortAddr:      shortAddr,
 		xChainAddr:     xAddr,
 		xChainBal:      0,
 		pChainAddr:     pAddr,

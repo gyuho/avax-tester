@@ -26,6 +26,7 @@ type Wallet struct {
 	PrivateKeyBytes []byte `json:"privateKeyBytes"`
 
 	CommonAddress string `json:"commonAddress"`
+	ShortAddress  string `json:"shortAddress"`
 	XChainAddress string `json:"xChainAddress"`
 	XChainBalance uint64 `json:"xChainBalance"`
 	PChainAddress string `json:"pChainAddress"`

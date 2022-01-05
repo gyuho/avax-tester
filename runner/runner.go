@@ -274,27 +274,22 @@ func (lc *localNetwork) start() {
 		return
 	}
 
-	if err := lc.withdrawEwoqXChainToWallet(
-		lc.nodeNames[0],
-		lc.wallets[0],
-		100000,
-	); err != nil {
+	if err := lc.withdrawEwoqXChainToWallet(lc.nodeNames[0], lc.wallets[0]); err != nil {
 		lc.errc <- err
 		return
 	}
-
-	// if err := lc.exportXtoPChain(
-	// 	lc.nodeNames[0],
-	// 	lc.wallets[0],
-	// 	50000,
-	// ); err != nil {
-	// 	lc.errc <- err
-	// 	return
-	// }
-	// if err := lc.withdrawEwoqCChain(lc.nodeNames[2]); err != nil {
-	// 	lc.errc <- err
-	// 	return
-	// }
+	if err := lc.exportX(lc.nodeNames[0], lc.wallets[0]); err != nil {
+		lc.errc <- err
+		return
+	}
+	if err := lc.importP(lc.nodeNames[0], lc.wallets[0]); err != nil {
+		lc.errc <- err
+		return
+	}
+	if err := lc.withdrawEwoqCChainToWallet(lc.nodeNames[1], lc.wallets[1]); err != nil {
+		lc.errc <- err
+		return
+	}
 	if err := lc.fetchBalanceEwoq(); err != nil {
 		lc.errc <- err
 		return
@@ -429,6 +424,7 @@ func (lc *localNetwork) writeOutput() error {
 			PrivateKey:      lc.wallets[i].privKeyEncoded,
 			PrivateKeyBytes: lc.wallets[i].privKey.Bytes(),
 			CommonAddress:   lc.wallets[i].commonAddr.String(),
+			ShortAddress:    lc.wallets[i].shortAddr.String(),
 			XChainAddress:   lc.wallets[i].xChainAddr,
 			XChainBalance:   lc.wallets[i].xChainBal,
 			PChainAddress:   lc.wallets[i].pChainAddr,
