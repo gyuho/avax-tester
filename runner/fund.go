@@ -3,6 +3,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/ava-labs/avalanchego/codec"
@@ -15,7 +16,9 @@ import (
 	"github.com/ava-labs/avalanchego/vms/components/avax"
 	"github.com/ava-labs/avalanchego/vms/platformvm"
 	"github.com/ava-labs/avalanchego/vms/secp256k1fx"
+	coreth_types "github.com/ava-labs/coreth/core/types"
 	"github.com/ava-labs/coreth/ethclient"
+	"github.com/ava-labs/coreth/params"
 	"github.com/fatih/color"
 	"github.com/gyuho/avax-tester/pkg/randutil"
 )
@@ -156,7 +159,6 @@ func (lc *localNetwork) fetchBalanceEwoq() error {
 
 		// TODO: timeout
 		// failed to get tx status problem while making JSON RPC POST request to http://localhost:53859/ext/P: Post "http://localhost:53859/ext/P": context deadline exceeded
-		// cli.CChainEthAPI().BalanceAt(ctx, ...
 		ethCli, err := ethclient.Dial(fmt.Sprintf("%s/ext/bc/C/rpc", lc.uris[nodeName]))
 		if err != nil {
 			return fmt.Errorf("failed to dial %q (%w)", nodeName, err)
@@ -369,6 +371,13 @@ func (lc *localNetwork) importP(nodeName string, from *wallet) error {
 	return lc.checkPChainTx(nodeName, txID)
 }
 
+var (
+	transferGasLimit = uint64(21000)
+
+	chainID = big.NewInt(43112)
+	signer  = coreth_types.LatestSignerForChainID(chainID)
+)
+
 func (lc *localNetwork) transferEwoqCChain(nodeName string, to *wallet) error {
 	color.Blue("withdrawing C-Chain funds from ewoq %q to wallet %q in %q",
 		lc.ewoqWallet.cChainAddr,
@@ -379,9 +388,35 @@ func (lc *localNetwork) transferEwoqCChain(nodeName string, to *wallet) error {
 	if !ok {
 		return fmt.Errorf("%q API client not found", nodeName)
 	}
-	_ = cli
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	nonce, err := cli.CChainEthAPI().NonceAt(ctx, lc.ewoqWallet.commonAddr, nil)
+	cancel()
+	if err != nil {
+		return err
+	}
 
-	return nil
+	transferAmount := big.NewInt(50000)
+	tx := coreth_types.NewTx(&coreth_types.DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     nonce,
+		To:        &to.commonAddr,
+		Gas:       transferGasLimit,
+		Value:     transferAmount,
+		GasFeeCap: big.NewInt(2000 * params.GWei),
+		GasTipCap: big.NewInt(1000 * params.GWei),
+		Data:      []byte{},
+	})
+	stx, err := coreth_types.SignTx(tx, signer, lc.ewoqWallet.privKey.ToECDSA())
+	if err != nil {
+		return fmt.Errorf("failed to sign transaction: %w", err)
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)
+	err = cli.CChainEthAPI().SendTransaction(ctx, stx)
+	cancel()
+	if err != nil {
+		return err
+	}
+	return lc.checkCChainTx(nodeName, nonce, to)
 }
 
 func (lc *localNetwork) getUTXOs(get func() ([][]byte, error), cd codec.Manager) ([]*avax.UTXO, error) {
@@ -505,6 +540,39 @@ func (lc *localNetwork) checkPChainTx(nodeName string, txID ids.ID) error {
 		}
 
 		color.Cyan("confirmed tx %q %q in %q", txID, status.Status, nodeName)
+		return nil
+	}
+	return ctx.Err()
+}
+
+func (lc *localNetwork) checkCChainTx(nodeName string, broadcastNonce uint64, w *wallet) error {
+	color.Blue("checking C-Chain nonce %d in %q", broadcastNonce, nodeName)
+	cli, ok := lc.apiClis[nodeName]
+	if !ok {
+		return fmt.Errorf("%q API client not found", nodeName)
+	}
+	ccli := cli.CChainEthAPI()
+
+	ctx, cancel := context.WithTimeout(context.Background(), txConfirmWait)
+	defer cancel()
+	for ctx.Err() == nil {
+		select {
+		case <-lc.stopc:
+			return errAborted
+		case <-time.After(checkInterval):
+		}
+
+		cur, err := ccli.NonceAt(ctx, w.commonAddr, nil)
+		if err != nil {
+			color.Yellow("failed to get nonce status %v in %q", err, nodeName)
+			continue
+		}
+		if cur < broadcastNonce {
+			color.Yellow("nonce %d < broadcastNonce %d in %q", cur, broadcastNonce, nodeName)
+			continue
+		}
+
+		color.Cyan("confirmed nonce %d in %q", broadcastNonce, nodeName)
 		return nil
 	}
 	return ctx.Err()
