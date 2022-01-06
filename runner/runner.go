@@ -274,7 +274,7 @@ func (lc *localNetwork) start() {
 		return
 	}
 
-	if err := lc.withdrawEwoqXChainToWallet(lc.nodeNames[0], lc.wallets[0]); err != nil {
+	if err := lc.transferEwoqXChain(lc.nodeNames[0], lc.wallets[0]); err != nil {
 		lc.errc <- err
 		return
 	}
@@ -286,7 +286,7 @@ func (lc *localNetwork) start() {
 		lc.errc <- err
 		return
 	}
-	if err := lc.withdrawEwoqCChainToWallet(lc.nodeNames[1], lc.wallets[1]); err != nil {
+	if err := lc.transferEwoqCChain(lc.nodeNames[1], lc.wallets[2]); err != nil {
 		lc.errc <- err
 		return
 	}

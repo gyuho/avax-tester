@@ -212,7 +212,7 @@ func (lc *localNetwork) fetchBalanceWallets() error {
 }
 
 // withdraw from ewoq X-Chain to a new wallet X-Chain
-func (lc *localNetwork) withdrawEwoqXChainToWallet(nodeName string, to *wallet) error {
+func (lc *localNetwork) transferEwoqXChain(nodeName string, to *wallet) error {
 	color.Blue("withdrawing X-Chain funds from ewoq %q to %q %q in %q",
 		lc.ewoqWallet.xChainAddr,
 		to.name,
@@ -369,7 +369,7 @@ func (lc *localNetwork) importP(nodeName string, from *wallet) error {
 	return lc.checkPChainTx(nodeName, txID)
 }
 
-func (lc *localNetwork) withdrawEwoqCChainToWallet(nodeName string, to *wallet) error {
+func (lc *localNetwork) transferEwoqCChain(nodeName string, to *wallet) error {
 	color.Blue("withdrawing C-Chain funds from ewoq %q to wallet %q in %q",
 		lc.ewoqWallet.cChainAddr,
 		to.cChainAddr,
