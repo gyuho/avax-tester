@@ -1,23 +1,35 @@
+// Copyright (C) 2019-2022, Ava Labs, Inc. All rights reserved.
+// See the file LICENSE for licensing terms.
+
 // Package randutil implements random utilities.
 package randutil
 
 import (
+	"crypto/rand"
 	"encoding/hex"
-	"math/rand"
-	"time"
+	"math/big"
 )
 
 const ll = "0123456789abcdefghijklmnopqrstuvwxyz"
 
+var lll = int64(len(ll))
+
 func String(n int) string {
 	b := make([]byte, n)
 	for i := range b {
-		rand.Seed(time.Now().UnixNano())
-		b[i] = ll[rand.Intn(len(ll))]
+		nBig, err := rand.Int(rand.Reader, big.NewInt(lll))
+		if err != nil {
+			panic(err)
+		}
+		b[i] = ll[nBig.Int64()]
 	}
 
-	rand.Seed(time.Now().UnixNano())
-	pfx := randoms[rand.Intn(len(randoms))]
+	nBig, err := rand.Int(rand.Reader, big.NewInt(randomsN))
+	if err != nil {
+		panic(err)
+	}
+
+	pfx := randoms[nBig.Int64()]
 	s := pfx + string(b)
 	if len(s) > n {
 		s = s[:n]
@@ -30,10 +42,12 @@ func Bytes(n int) []byte {
 	return []byte(String(n))
 }
 
-// openssl rand -hex 32
+// openssl rand -hex 32.
 func Hex(n int) string {
 	return hex.EncodeToString(Bytes(n))
 }
+
+var randomsN = int64(len(randoms))
 
 var randoms = []string{
 	"autumn",

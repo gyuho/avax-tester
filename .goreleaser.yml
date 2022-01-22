@@ -1,13 +1,17 @@
 # ref. https://goreleaser.com/customization/build/
 builds:
-  - main: ./cmd/avax-tester
-
-    binary: avax-tester
-
+  - id: avalanche-network-runner
+    main: ./cmd/avalanche-network-runner
+    binary: avalanche-network-runner
     flags:
       - -v
-
     ignore:
+      - goos: linux
+        goarch: arm64
+      - goos: darwin
+        goarch: amd64
+      - goos: darwin
+        goarch: arm64
       - goos: darwin
         goarch: 386
       - goos: linux

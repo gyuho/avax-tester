@@ -6,4 +6,5 @@ if ! [[ "$0" =~ scripts/updatedep.sh ]]; then
   exit 255
 fi
 
+# TODO: automatically bump up dependencies
 go mod tidy -v

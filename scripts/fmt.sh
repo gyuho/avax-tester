@@ -14,8 +14,17 @@ gofmt -s -w .
 goimports -w ./avax
 gofmt -s -w ./avax
 
+goimports -w ./client
+gofmt -s -w ./client
+
 goimports -w ./cmd
 gofmt -s -w ./cmd
 
+goimports -w ./pkg
+gofmt -s -w ./pkg
+
 goimports -w ./runner
 gofmt -s -w ./runner
+
+goimports -w ./server
+gofmt -s -w ./server
