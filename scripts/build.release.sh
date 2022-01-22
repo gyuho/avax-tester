@@ -18,3 +18,6 @@ goreleaser release \
 --config .goreleaser.yml \
 --skip-announce \
 --skip-publish
+
+# to test without git tags
+# goreleaser release --config .goreleaser.yml --rm-dist --skip-announce --skip-publish --snapshot

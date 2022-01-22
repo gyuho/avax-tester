@@ -113,3 +113,8 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
 )
+
+// duktape is very slow to build including a bunch of C code in a single file
+// ref. https://github.com/ethereum/go-ethereum/issues/20590
+// ref. https://github.com/vocdoni/vocdoni-node/commit/5670fb0eeac873eb1b1fec99889976c06aaab20b
+replace gopkg.in/olebedev/go-duktape.v3 => ./internal/go-duktape/v3

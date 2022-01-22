@@ -6,10 +6,6 @@ builds:
     flags:
       - -v
     ignore:
-      - goos: linux
-        goarch: arm64
-      - goos: darwin
-        goarch: arm64
       - goos: darwin
         goarch: 386
       - goos: linux
