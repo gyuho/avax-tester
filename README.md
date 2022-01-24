@@ -1,4 +1,7 @@
-# avax-tester
+
+**NOTE: TO BE MIGRATED TO https://github.com/ava-labs/avalanche-network-runner.**
+
+# `network-runner` RPC server
 
 **What does `network-runner` do?** The primary focus of [`network-runner`](https://github.com/ava-labs/avalanche-network-runner) is to create a local network, as a test framework for local development.
 
@@ -14,7 +17,7 @@
 
 ```bash
 # to install
-cd ${HOME}/go/src/github.com/ava-labs/network-runner-example
+cd ${HOME}/go/src/github.com/gyuho/avax-tester
 go install -v ./cmd/avalanche-network-runner
 ```
 
