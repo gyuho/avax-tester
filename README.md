@@ -52,7 +52,7 @@ avalanche-network-runner control start \
 --log-level debug \
 --endpoint="0.0.0.0:8080" \
 --avalanchego-path ${HOME}/go/src/github.com/ava-labs/avalanchego/build/avalanchego \
---whitelisted-subnets=""
+--whitelisted-subnets="24tZhrm8j8GCJRE9PomW8FaeqbgGS4UAQjJnqqn8pq5NwYSYV1"
 ```
 
 To wait for the cluster health:
