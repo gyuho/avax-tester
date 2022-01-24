@@ -45,7 +45,7 @@ To start the server:
 
 ```bash
 # replace with your local path
-curl -X POST -k http://localhost:8081/v1/control/start -d '{"execPath":"/Users/gyuho.lee/go/src/github.com/ava-labs/avalanchego/build/avalanchego",whitelistedSubnets:""}'
+curl -X POST -k http://localhost:8081/v1/control/start -d '{"execPath":"/Users/gyuho.lee/go/src/github.com/ava-labs/avalanchego/build/avalanchego","whitelistedSubnets":"24tZhrm8j8GCJRE9PomW8FaeqbgGS4UAQjJnqqn8pq5NwYSYV1"}'
 
 # or
 avalanche-network-runner control start \
