@@ -76,14 +76,14 @@ var _ = ginkgo.BeforeSuite(func() {
 })
 
 var _ = ginkgo.AfterSuite(func() {
-	color.Outf("{{red}}shutting down client{{/}}\n")
-	err := cli.Close()
-	gomega.Ω(err).Should(gomega.BeNil())
-
 	color.Outf("{{red}}shutting down cluster{{/}}\n")
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	_, err = cli.Stop(ctx)
+	_, err := cli.Stop(ctx)
 	cancel()
+	gomega.Ω(err).Should(gomega.BeNil())
+
+	color.Outf("{{red}}shutting down client{{/}}\n")
+	err = cli.Close()
 	gomega.Ω(err).Should(gomega.BeNil())
 })
 
