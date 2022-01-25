@@ -30,14 +30,14 @@ type Config struct {
 
 type Client interface {
 	Ping(ctx context.Context) (*rpcpb.PingResponse, error)
-	Start(ctx context.Context, execPath string, opts ...OpOption) (*rpcpb.ClusterInfo, error)
-	Health(ctx context.Context) (*rpcpb.ClusterInfo, error)
+	Start(ctx context.Context, execPath string, opts ...OpOption) (*rpcpb.StartResponse, error)
+	Health(ctx context.Context) (*rpcpb.HealthResponse, error)
 	URIs(ctx context.Context) ([]string, error)
-	Status(ctx context.Context) (*rpcpb.ClusterInfo, error)
+	Status(ctx context.Context) (*rpcpb.StatusResponse, error)
 	StreamStatus(ctx context.Context, pushInterval time.Duration) (<-chan *rpcpb.ClusterInfo, error)
-	RemoveNode(ctx context.Context, name string) (*rpcpb.ClusterInfo, error)
-	RestartNode(ctx context.Context, name string, execPath string, opts ...OpOption) (*rpcpb.ClusterInfo, error)
-	Stop(ctx context.Context) (*rpcpb.ClusterInfo, error)
+	RemoveNode(ctx context.Context, name string) (*rpcpb.RemoveNodeResponse, error)
+	RestartNode(ctx context.Context, name string, execPath string, opts ...OpOption) (*rpcpb.RestartNodeResponse, error)
+	Stop(ctx context.Context) (*rpcpb.StopResponse, error)
 	Close() error
 }
 
@@ -92,28 +92,20 @@ func (c *client) Ping(ctx context.Context) (*rpcpb.PingResponse, error) {
 	return c.pingc.Ping(ctx, &rpcpb.PingRequest{})
 }
 
-func (c *client) Start(ctx context.Context, execPath string, opts ...OpOption) (*rpcpb.ClusterInfo, error) {
+func (c *client) Start(ctx context.Context, execPath string, opts ...OpOption) (*rpcpb.StartResponse, error) {
 	ret := &Op{}
 	ret.applyOpts(opts)
 
 	zap.L().Info("start")
-	resp, err := c.controlc.Start(ctx, &rpcpb.StartRequest{
+	return c.controlc.Start(ctx, &rpcpb.StartRequest{
 		ExecPath:           execPath,
 		WhitelistedSubnets: &ret.whitelistedSubnets,
 	})
-	if err != nil {
-		return nil, err
-	}
-	return resp.ClusterInfo, nil
 }
 
-func (c *client) Health(ctx context.Context) (*rpcpb.ClusterInfo, error) {
+func (c *client) Health(ctx context.Context) (*rpcpb.HealthResponse, error) {
 	zap.L().Info("health")
-	resp, err := c.controlc.Health(ctx, &rpcpb.HealthRequest{})
-	if err != nil {
-		return nil, err
-	}
-	return resp.ClusterInfo, nil
+	return c.controlc.Health(ctx, &rpcpb.HealthRequest{})
 }
 
 func (c *client) URIs(ctx context.Context) ([]string, error) {
@@ -125,13 +117,9 @@ func (c *client) URIs(ctx context.Context) ([]string, error) {
 	return resp.Uris, nil
 }
 
-func (c *client) Status(ctx context.Context) (*rpcpb.ClusterInfo, error) {
+func (c *client) Status(ctx context.Context) (*rpcpb.StatusResponse, error) {
 	zap.L().Info("status")
-	resp, err := c.controlc.Status(ctx, &rpcpb.StatusRequest{})
-	if err != nil {
-		return nil, err
-	}
-	return resp.ClusterInfo, nil
+	return c.controlc.Status(ctx, &rpcpb.StatusRequest{})
 }
 
 func (c *client) StreamStatus(ctx context.Context, pushInterval time.Duration) (<-chan *rpcpb.ClusterInfo, error) {
@@ -181,40 +169,28 @@ func (c *client) StreamStatus(ctx context.Context, pushInterval time.Duration) (
 	return ch, nil
 }
 
-func (c *client) Stop(ctx context.Context) (*rpcpb.ClusterInfo, error) {
+func (c *client) Stop(ctx context.Context) (*rpcpb.StopResponse, error) {
 	zap.L().Info("stop")
-	resp, err := c.controlc.Stop(ctx, &rpcpb.StopRequest{})
-	if err != nil {
-		return nil, err
-	}
-	return resp.ClusterInfo, nil
+	return c.controlc.Stop(ctx, &rpcpb.StopRequest{})
 }
 
-func (c *client) RemoveNode(ctx context.Context, name string) (*rpcpb.ClusterInfo, error) {
+func (c *client) RemoveNode(ctx context.Context, name string) (*rpcpb.RemoveNodeResponse, error) {
 	zap.L().Info("remove node", zap.String("name", name))
-	resp, err := c.controlc.RemoveNode(ctx, &rpcpb.RemoveNodeRequest{Name: name})
-	if err != nil {
-		return nil, err
-	}
-	return resp.ClusterInfo, nil
+	return c.controlc.RemoveNode(ctx, &rpcpb.RemoveNodeRequest{Name: name})
 }
 
-func (c *client) RestartNode(ctx context.Context, name string, execPath string, opts ...OpOption) (*rpcpb.ClusterInfo, error) {
+func (c *client) RestartNode(ctx context.Context, name string, execPath string, opts ...OpOption) (*rpcpb.RestartNodeResponse, error) {
 	ret := &Op{}
 	ret.applyOpts(opts)
 
 	zap.L().Info("restart node", zap.String("name", name))
-	resp, err := c.controlc.RestartNode(ctx, &rpcpb.RestartNodeRequest{
+	return c.controlc.RestartNode(ctx, &rpcpb.RestartNodeRequest{
 		Name: name,
 		StartRequest: &rpcpb.StartRequest{
 			ExecPath:           execPath,
 			WhitelistedSubnets: &ret.whitelistedSubnets,
 		},
 	})
-	if err != nil {
-		return nil, err
-	}
-	return resp.ClusterInfo, nil
 }
 
 func (c *client) Close() error {

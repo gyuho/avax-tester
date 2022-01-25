@@ -79,16 +79,22 @@ var _ = ginkgo.AfterSuite(func() {
 	color.Outf("{{red}}shutting down client{{/}}\n")
 	err := cli.Close()
 	gomega.Ω(err).Should(gomega.BeNil())
+
+	color.Outf("{{red}}shutting down cluster{{/}}\n")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	_, err = cli.Stop(ctx)
+	cancel()
+	gomega.Ω(err).Should(gomega.BeNil())
 })
 
 var _ = ginkgo.Describe("[Start/Remove/Restart/Stop]", func() {
 	ginkgo.It("can start", func() {
 		ginkgo.By("calling start API with the first binary", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			info, err := cli.Start(ctx, execPath1)
+			resp, err := cli.Start(ctx, execPath1)
 			cancel()
 			gomega.Ω(err).Should(gomega.BeNil())
-			color.Outf("{{green}}successfully started:{{/}} %+v\n", info.NodeNames)
+			color.Outf("{{green}}successfully started:{{/}} %+v\n", resp.ClusterInfo.NodeNames)
 		})
 	})
 
@@ -134,10 +140,10 @@ var _ = ginkgo.Describe("[Start/Remove/Restart/Stop]", func() {
 		time.Sleep(time.Minute)
 		ginkgo.By("calling remove API with the first binary", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			info, err := cli.RemoveNode(ctx, "node5")
+			resp, err := cli.RemoveNode(ctx, "node5")
 			cancel()
 			gomega.Ω(err).Should(gomega.BeNil())
-			color.Outf("{{green}}successfully removed:{{/}} %+v\n", info.NodeNames)
+			color.Outf("{{green}}successfully removed:{{/}} %+v\n", resp.ClusterInfo.NodeNames)
 		})
 	})
 
@@ -145,20 +151,10 @@ var _ = ginkgo.Describe("[Start/Remove/Restart/Stop]", func() {
 		time.Sleep(time.Minute)
 		ginkgo.By("calling restart API with the second binary", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			info, err := cli.RestartNode(ctx, "node4", execPath2)
+			resp, err := cli.RestartNode(ctx, "node4", execPath2)
 			cancel()
 			gomega.Ω(err).Should(gomega.BeNil())
-			color.Outf("{{green}}successfully restarted:{{/}} %+v\n", info.NodeNames)
-		})
-	})
-
-	ginkgo.It("can stop", func() {
-		ginkgo.By("calling stop API", func() {
-			color.Outf("{{red}}shutting down cluster{{/}}\n")
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			_, err := cli.Stop(ctx)
-			cancel()
-			gomega.Ω(err).Should(gomega.BeNil())
+			color.Outf("{{green}}successfully restarted:{{/}} %+v\n", resp.ClusterInfo.NodeNames)
 		})
 	})
 })
