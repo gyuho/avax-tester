@@ -48,7 +48,7 @@ type localNetwork struct {
 	stopOnce sync.Once
 }
 
-func newNetwork(execPath string, rootDataDir string, whitelistedSubnets string) (*localNetwork, error) {
+func newNetwork(execPath string, rootDataDir string, whitelistedSubnets string, logLevel string) (*localNetwork, error) {
 	lcfg, err := logging.DefaultConfig()
 	if err != nil {
 		return nil, err
@@ -58,6 +58,10 @@ func newNetwork(execPath string, rootDataDir string, whitelistedSubnets string) 
 	logger, err := logFactory.Make("main")
 	if err != nil {
 		return nil, err
+	}
+
+	if logLevel == "" {
+		logLevel = "INFO"
 	}
 
 	nodeInfos := make(map[string]*rpcpb.NodeInfo)
@@ -82,11 +86,12 @@ func newNetwork(execPath string, rootDataDir string, whitelistedSubnets string) 
 	"api-ipcs-enabled":true,
 	"index-enabled":true,
 	"log-display-level":"INFO",
-	"log-level":"INFO",
+	"log-level":"%s",
 	"log-dir":"%s",
 	"db-dir":"%s",
 	"whitelisted-subnets":"%s"
 }`,
+			logLevel,
 			logDir,
 			dbDir,
 			whitelistedSubnets,

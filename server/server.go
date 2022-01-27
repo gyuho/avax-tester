@@ -211,7 +211,7 @@ func (s *server) Start(ctx context.Context, req *rpcpb.StartRequest) (*rpcpb.Sta
 		return nil, ErrAlreadyBootstrapped
 	}
 
-	s.network, err = newNetwork(req.ExecPath, rootDataDir, req.GetWhitelistedSubnets())
+	s.network, err = newNetwork(req.GetExecPath(), rootDataDir, req.GetWhitelistedSubnets(), req.GetLogLevel())
 	if err != nil {
 		return nil, err
 	}
