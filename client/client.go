@@ -100,6 +100,7 @@ func (c *client) Start(ctx context.Context, execPath string, opts ...OpOption) (
 	return c.controlc.Start(ctx, &rpcpb.StartRequest{
 		ExecPath:           execPath,
 		WhitelistedSubnets: &ret.whitelistedSubnets,
+		LogLevel:           &ret.logLevel,
 	})
 }
 
@@ -201,6 +202,7 @@ func (c *client) Close() error {
 }
 
 type Op struct {
+	logLevel           string
 	whitelistedSubnets string
 }
 
@@ -215,6 +217,12 @@ func (op *Op) applyOpts(opts []OpOption) {
 func WithWhitelistedSubnets(whitelistedSubnets string) OpOption {
 	return func(op *Op) {
 		op.whitelistedSubnets = whitelistedSubnets
+	}
+}
+
+func WithLogLevel(logLevel string) OpOption {
+	return func(op *Op) {
+		op.logLevel = logLevel
 	}
 }
 
