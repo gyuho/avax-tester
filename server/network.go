@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -91,7 +92,7 @@ func newNetwork(execPath string, rootDataDir string, whitelistedSubnets string, 
 	"db-dir":"%s",
 	"whitelisted-subnets":"%s"
 }`,
-			logLevel,
+			strings.ToUpper(logLevel),
 			logDir,
 			dbDir,
 			whitelistedSubnets,
