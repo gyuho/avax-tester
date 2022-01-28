@@ -202,8 +202,8 @@ func (c *client) Close() error {
 }
 
 type Op struct {
-	logLevel           string
 	whitelistedSubnets string
+	logLevel           string
 }
 
 type OpOption func(*Op)
